@@ -43,12 +43,37 @@ export function computeCircadianEntropy(hourBuckets: number[]): number {
     .map((b) => b / total)
     .reduce((sum, p) => sum + p * Math.log2(p), 0);
 }
-// Score contribution: 0-25 points
-// score = 25 * (entropy / 4.58)
-// Entropy near 4.58 (perfectly uniform) = 25 points (maximum suspicion)
+// Score contribution: 0-20 points
+// score = 20 * (entropy / 4.58)
 
-// ─── Test Vectors (for verification) ────────────────────────────────────────
-// CV of [0, 900000, 60000, 3600000, 120000] ms gaps → should return > 1.0 (human-like)
-// CV of [900000, 901000, 900500, 899000, 900200] ms gaps → should return < 0.01 (bot-like)
-// Entropy of hourBuckets all-zero except hours 9-17 → should return < 3.0
-// Entropy of hourBuckets perfectly uniform (all equal) → should return ~4.58
+/**
+ * Signal 5 — Burst-Silence Ratio (Pozzana & Ferrara, 2020)
+ *
+ * Bots post in batches then go silent (batch scheduler pattern).
+ * Humans have irregular but continuous activity.
+ * Ratio = max_gap / median_gap
+ *
+ * @returns ratio (high = suspicious burst-silence pattern), or -1 if insufficient data
+ */
+export function computeBurstSilenceRatio(postTimestamps: number[]): number {
+  if (postTimestamps.length < 8) return -1; // need more data for meaningful gaps
+
+  const sorted = [...postTimestamps].sort((a, b) => a - b);
+  const gaps = sorted.slice(1).map((t, i) => t - sorted[i]!);
+
+  // Median gap
+  const sortedGaps = [...gaps].sort((a, b) => a - b);
+  const mid = Math.floor(sortedGaps.length / 2);
+  const median =
+    sortedGaps.length % 2 === 0
+      ? (sortedGaps[mid - 1]! + sortedGaps[mid]!) / 2
+      : sortedGaps[mid]!;
+
+  if (median === 0) return 0;
+  const maxGap = sortedGaps[sortedGaps.length - 1]!;
+  return maxGap / median;
+}
+// Score contribution: 0-20 points
+// Humans: ratio < 5 (some variation, never extreme)
+// Bots: ratio > 20 (15-min burst, 24-hour silence, repeat)
+// score = 20 * Math.min(1, ratio / 30)

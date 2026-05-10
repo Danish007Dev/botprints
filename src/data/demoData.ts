@@ -1,25 +1,48 @@
 // ─── Demo Data for BotPrints ────────────────────────────────────────────────
-// 5 fake accounts with varying risk profiles for judges to see.
+// 5 fake accounts with distinct behavioral patterns.
+// AutoShill_9000 and CryptoMoonBot share posting windows (coordinated ring).
 
 import type { UserProfile } from '../types/index.js';
 
-function makeTimestamps(count: number, intervalMs: number, jitterMs: number): number[] {
-  const now = Date.now();
-  return Array.from({ length: count }, (_, i) =>
-    now - (count - i) * intervalMs + Math.floor(Math.random() * jitterMs)
-  );
+const NOW = Date.now();
+const HOUR = 3600000;
+const DAY = 86400000;
+
+// Shared base timestamps for the coordinated pair — same 5-min windows
+const SHARED_BASE = [
+  NOW - 6 * DAY + 2 * HOUR,
+  NOW - 6 * DAY + 2 * HOUR + 180000,
+  NOW - 5 * DAY + 14 * HOUR,
+  NOW - 5 * DAY + 14 * HOUR + 120000,
+  NOW - 4 * DAY + 8 * HOUR,
+  NOW - 4 * DAY + 8 * HOUR + 90000,
+  NOW - 3 * DAY + 20 * HOUR,
+  NOW - 3 * DAY + 20 * HOUR + 200000,
+  NOW - 2 * DAY + 5 * HOUR,
+  NOW - 2 * DAY + 5 * HOUR + 150000,
+  NOW - 1 * DAY + 11 * HOUR,
+  NOW - 1 * DAY + 11 * HOUR + 60000,
+];
+
+function makeBotTimestamps(base: number[], extra: number): number[] {
+  const ts = [...base];
+  for (let i = 0; i < extra; i++) {
+    ts.push(NOW - Math.floor(Math.random() * 7 * DAY) + Math.floor(Math.random() * 300000));
+  }
+  return ts.sort((a, b) => a - b);
+}
+
+function makeHumanTimestamps(count: number): number[] {
+  return Array.from({ length: count }, () =>
+    NOW - Math.floor(Math.random() * 30 * DAY)
+  ).sort((a, b) => a - b);
 }
 
 function makeHourBuckets(pattern: 'uniform' | 'human' | 'night'): number[] {
   const b = new Array<number>(24).fill(0);
-  if (pattern === 'uniform') {
-    for (let i = 0; i < 24; i++) b[i] = 4 + Math.floor(Math.random() * 2);
-  } else if (pattern === 'human') {
-    for (let i = 8; i <= 22; i++) b[i] = 3 + Math.floor(Math.random() * 5);
-  } else {
-    for (let i = 0; i < 24; i++) b[i] = 2 + Math.floor(Math.random() * 3);
-    for (let i = 1; i <= 5; i++) b[i] = 8 + Math.floor(Math.random() * 4);
-  }
+  if (pattern === 'uniform') for (let i = 0; i < 24; i++) b[i] = 4;
+  else if (pattern === 'human') for (let i = 8; i <= 22; i++) b[i] = 3 + (i % 3);
+  else { for (let i = 0; i < 24; i++) b[i] = 2; for (let i = 1; i <= 5; i++) b[i] = 9; }
   return b;
 }
 
@@ -27,41 +50,41 @@ export const DEMO_PROFILES: UserProfile[] = [
   {
     username: 'AutoShill_9000',
     posts: 47, comments: 3, edits: 0,
-    postTimestamps: makeTimestamps(47, 900000, 5000),
+    postTimestamps: makeBotTimestamps(SHARED_BASE, 35),
     hourBuckets: makeHourBuckets('uniform'),
-    firstSeen: Date.now() - 7 * 86400000,
-    lastUpdated: Date.now(),
+    firstSeen: NOW - 7 * DAY,
+    lastUpdated: NOW,
   },
   {
     username: 'CryptoMoonBot',
     posts: 32, comments: 1, edits: 0,
-    postTimestamps: makeTimestamps(32, 1800000, 3000),
+    postTimestamps: makeBotTimestamps(SHARED_BASE, 20),
     hourBuckets: makeHourBuckets('uniform'),
-    firstSeen: Date.now() - 5 * 86400000,
-    lastUpdated: Date.now(),
+    firstSeen: NOW - 5 * DAY,
+    lastUpdated: NOW,
   },
   {
     username: 'GenuineUser42',
     posts: 12, comments: 45, edits: 8,
-    postTimestamps: makeTimestamps(12, 14400000, 7200000),
+    postTimestamps: makeHumanTimestamps(12),
     hourBuckets: makeHourBuckets('human'),
-    firstSeen: Date.now() - 30 * 86400000,
-    lastUpdated: Date.now(),
+    firstSeen: NOW - 30 * DAY,
+    lastUpdated: NOW,
   },
   {
     username: 'SleeperAgent_X',
     posts: 25, comments: 20, edits: 2,
-    postTimestamps: makeTimestamps(25, 3600000, 60000),
+    postTimestamps: makeBotTimestamps([], 25),
     hourBuckets: makeHourBuckets('night'),
-    firstSeen: Date.now() - 14 * 86400000,
-    lastUpdated: Date.now(),
+    firstSeen: NOW - 14 * DAY,
+    lastUpdated: NOW,
   },
   {
     username: 'HealthyRedditor',
     posts: 8, comments: 67, edits: 15,
-    postTimestamps: makeTimestamps(8, 43200000, 10800000),
+    postTimestamps: makeHumanTimestamps(8),
     hourBuckets: makeHourBuckets('human'),
-    firstSeen: Date.now() - 60 * 86400000,
-    lastUpdated: Date.now(),
+    firstSeen: NOW - 60 * DAY,
+    lastUpdated: NOW,
   },
 ];

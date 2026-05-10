@@ -43,10 +43,11 @@ export const DEFAULT_BASELINE: CommunityBaseline = {
 };
 
 export interface ScoreBreakdown {
-  temporal: number; // 0-30
-  circadian: number; // 0-25
-  engagement: number; // 0-25
-  editRate: number; // 0-20
+  temporal: number; // 0-25
+  circadian: number; // 0-20
+  engagement: number; // 0-20
+  editRate: number; // 0-15
+  burstSilence: number; // 0-20 — NEW: burst-silence pattern
   total: number; // 0-100
   hasEnoughData: boolean;
 }
@@ -64,6 +65,23 @@ export interface ScoredUser {
   breakdown: ScoreBreakdown;
   shift: ShiftResult;
   profile: UserProfile;
+  coordGroup?: string; // group ID if part of a coordinated ring
+}
+
+export interface CoordinatedGroup {
+  id: string;
+  members: string[]; // usernames
+  avgCorrelation: number; // 0-1
+  sharedWindows: number; // how many 5-min windows overlap
+}
+
+export interface SubredditSummary {
+  totalTracked: number;
+  highRiskCount: number;
+  shiftedCount: number;
+  coordGroupCount: number;
+  healthScore: number; // 100 - avg risk of top 20 (higher = healthier)
+  lastScan: number;
 }
 
 export type ModAction = 'watch' | 'restrict' | 'dismiss';

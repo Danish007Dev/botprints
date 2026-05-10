@@ -1,132 +1,128 @@
 // ─── BotPrints Dashboard Client ─────────────────────────────────────────────
 let currentFilter = 'all';
 let allUsers = [];
+let coordGroups = [];
 
 async function fetchDashboard() {
   try {
     const res = await fetch('/api/dashboard');
     return await res.json();
-  } catch (err) {
-    console.error('Failed to fetch dashboard:', err);
-    return { users: [], totalTracked: 0, lastUpdated: 0 };
-  }
+  } catch { return { users: [], coordGroups: [], summary: null }; }
 }
 
 async function loadDemoData() {
   const btn = document.getElementById('btn-demo');
-  btn.textContent = 'Loading...';
-  btn.disabled = true;
-  try {
-    await fetch('/api/load-demo', { method: 'POST' });
-    await refreshDashboard();
-  } catch (err) {
-    console.error('Failed to load demo:', err);
-  }
-  btn.textContent = 'Load Demo Data';
-  btn.disabled = false;
+  btn.textContent = 'Loading...'; btn.disabled = true;
+  try { await fetch('/api/load-demo', { method: 'POST' }); await refreshDashboard(); }
+  catch (e) { console.error(e); }
+  btn.textContent = 'Load Demo Data'; btn.disabled = false;
 }
 
 async function dismissUser(username) {
-  try {
-    await fetch(`/api/dismiss/${encodeURIComponent(username)}`, { method: 'POST' });
-    await refreshDashboard();
-  } catch (err) {
-    console.error('Failed to dismiss:', err);
-  }
+  try { await fetch(`/api/dismiss/${encodeURIComponent(username)}`, { method: 'POST' }); await refreshDashboard(); }
+  catch (e) { console.error(e); }
 }
 
 async function refreshDashboard() {
-  const loading = document.getElementById('loading');
-  const grid = document.getElementById('user-grid');
-  const empty = document.getElementById('empty-state');
-  loading.style.display = 'block';
-  grid.innerHTML = '';
-  empty.style.display = 'none';
-
+  show('loading'); hide('user-grid-content'); hide('empty-state'); hide('summary-grid'); hide('ring-alert');
+  document.getElementById('user-grid').innerHTML = '';
   const data = await fetchDashboard();
   allUsers = data.users || [];
-  document.getElementById('tracked-count').textContent = `${data.totalTracked} tracked`;
-  loading.style.display = 'none';
+  coordGroups = data.coordGroups || [];
+  hide('loading');
+  if (data.summary) renderSummary(data.summary);
+  if (coordGroups.length > 0) renderRingAlerts(coordGroups);
   renderUsers();
+}
+
+function renderSummary(s) {
+  document.getElementById('s-tracked').textContent = s.totalTracked;
+  document.getElementById('s-highrisk').textContent = s.highRiskCount;
+  document.getElementById('s-shifted').textContent = s.shiftedCount;
+  document.getElementById('s-rings').textContent = s.coordGroupCount;
+  document.getElementById('s-health').textContent = s.healthScore;
+  show('summary-grid');
+}
+
+function renderRingAlerts(groups) {
+  const el = document.getElementById('ring-alert');
+  el.innerHTML = groups.map(g => `
+    <div class="ring-box">
+      <div class="ring-header">
+        <span class="ring-icon">🔗</span>
+        <span class="ring-title">Coordinated Ring Detected: ${g.id}</span>
+      </div>
+      <div class="ring-members">
+        ${g.members.map(m => `<span class="ring-member">u/${m}</span>`).join('')}
+      </div>
+      <div class="ring-meta">${g.sharedWindows} shared time windows · ${Math.round(g.avgCorrelation * 100)}% temporal correlation</div>
+    </div>
+  `).join('');
+  show('ring-alert');
 }
 
 function renderUsers() {
   const grid = document.getElementById('user-grid');
   const empty = document.getElementById('empty-state');
   grid.innerHTML = '';
-
   let filtered = allUsers;
   if (currentFilter === 'high') filtered = allUsers.filter(u => u.score >= 70);
   if (currentFilter === 'shifted') filtered = allUsers.filter(u => u.shift?.shifted);
-
-  if (filtered.length === 0) {
-    empty.style.display = 'block';
-    return;
-  }
-  empty.style.display = 'none';
+  if (currentFilter === 'ring') filtered = allUsers.filter(u => u.coordGroup);
+  if (!filtered.length) { show('empty-state'); return; }
+  hide('empty-state');
   filtered.sort((a, b) => b.score - a.score);
   filtered.forEach(u => grid.appendChild(createUserCard(u)));
 }
 
-function riskClass(score) {
-  if (score >= 70) return 'high';
-  if (score >= 40) return 'medium';
-  return 'low';
+function riskClass(s) { return s >= 70 ? 'high' : s >= 40 ? 'medium' : 'low'; }
+
+function signalColor(v, max) {
+  const r = v / max;
+  return r >= 0.7 ? '#ff4757' : r >= 0.4 ? '#ffa502' : '#2ed573';
 }
 
-function createRadarSVG(breakdown) {
-  const { temporal, circadian, engagement, editRate } = breakdown;
-  const maxes = [30, 25, 25, 20];
-  const vals = [temporal, circadian, engagement, editRate];
-  const labels = ['TMP', 'CRC', 'ENG', 'EDT'];
+function createRadarSVG(b) {
+  const vals = [b.temporal, b.circadian, b.engagement, b.editRate, b.burstSilence];
+  const maxes = [25, 20, 20, 15, 20];
+  const labels = ['TMP', 'CRC', 'ENG', 'EDT', 'BST'];
   const cx = 55, cy = 55, r = 40;
-  const angles = vals.map((_, i) => (Math.PI * 2 * i) / vals.length - Math.PI / 2);
-
-  // Outer polygon
-  const outerPts = angles.map(a => `${cx + r * Math.cos(a)},${cy + r * Math.sin(a)}`).join(' ');
-  // Data polygon
-  const dataPts = vals.map((v, i) => {
-    const ratio = Math.min(v / maxes[i], 1);
-    const a = angles[i];
-    return `${cx + r * ratio * Math.cos(a)},${cy + r * ratio * Math.sin(a)}`;
-  }).join(' ');
-  // Grid circles
+  const n = vals.length;
+  const angles = vals.map((_, i) => (Math.PI * 2 * i) / n - Math.PI / 2);
   const grids = [0.25, 0.5, 0.75, 1].map(s =>
-    `<circle cx="${cx}" cy="${cy}" r="${r * s}" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="0.5"/>`
-  ).join('');
-  // Axes
+    `<circle cx="${cx}" cy="${cy}" r="${r*s}" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="0.5"/>`).join('');
   const axes = angles.map(a =>
-    `<line x1="${cx}" y1="${cy}" x2="${cx + r * Math.cos(a)}" y2="${cy + r * Math.sin(a)}" stroke="rgba(255,255,255,0.08)" stroke-width="0.5"/>`
-  ).join('');
-  // Labels
-  const lbls = labels.map((l, i) => {
-    const a = angles[i];
-    const lx = cx + (r + 12) * Math.cos(a);
-    const ly = cy + (r + 12) * Math.sin(a);
-    return `<text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="central" fill="#9aa0a6" font-size="7" font-family="Inter,sans-serif">${l}</text>`;
+    `<line x1="${cx}" y1="${cy}" x2="${cx+r*Math.cos(a)}" y2="${cy+r*Math.sin(a)}" stroke="rgba(255,255,255,0.06)" stroke-width="0.5"/>`).join('');
+  const dataPts = vals.map((v,i) => {
+    const ratio = Math.min(v/maxes[i], 1);
+    return `${cx+r*ratio*Math.cos(angles[i])},${cy+r*ratio*Math.sin(angles[i])}`;
+  }).join(' ');
+  const total = vals.reduce((a,b)=>a+b,0);
+  const totalMax = maxes.reduce((a,b)=>a+b,0);
+  const pct = total/totalMax;
+  const fill = pct > 0.7 ? 'rgba(255,71,87,0.25)' : pct > 0.4 ? 'rgba(255,165,2,0.2)' : 'rgba(46,213,115,0.15)';
+  const stroke = pct > 0.7 ? '#ff4757' : pct > 0.4 ? '#ffa502' : '#2ed573';
+  const lbls = labels.map((l,i) => {
+    const lx = cx+(r+13)*Math.cos(angles[i]), ly = cy+(r+13)*Math.sin(angles[i]);
+    return `<text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="central" fill="#8b929a" font-size="6.5" font-family="Inter,sans-serif">${l}</text>`;
   }).join('');
-
-  const total = vals.reduce((a, b) => a + b, 0);
-  const totalMax = maxes.reduce((a, b) => a + b, 0);
-  const fillColor = total / totalMax > 0.7 ? 'rgba(255,68,68,0.3)' : total / totalMax > 0.4 ? 'rgba(255,171,0,0.25)' : 'rgba(0,200,83,0.2)';
-  const strokeColor = total / totalMax > 0.7 ? '#ff4444' : total / totalMax > 0.4 ? '#ffab00' : '#00c853';
-
-  return `<svg viewBox="0 0 110 110" width="100" height="100">
-    ${grids}${axes}
-    <polygon points="${outerPts}" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
-    <polygon points="${dataPts}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="1.5"/>
-    ${lbls}
-  </svg>`;
+  return `<svg viewBox="0 0 110 110" width="100" height="100">${grids}${axes}
+    <polygon points="${dataPts}" fill="${fill}" stroke="${stroke}" stroke-width="1.5"/>${lbls}</svg>`;
 }
 
 function createUserCard(user) {
   const risk = riskClass(user.score);
   const card = document.createElement('div');
-  card.className = `user-card risk-${risk}`;
+  const ringClass = user.coordGroup ? ' in-ring' : '';
+  card.className = `user-card risk-${risk}${ringClass}`;
   card.onclick = () => card.classList.toggle('expanded');
-
-  const daysActive = Math.max(1, Math.round((Date.now() - user.profile.firstSeen) / 86400000));
+  const days = Math.max(1, Math.round((Date.now() - user.profile.firstSeen) / 86400000));
   const b = user.breakdown;
+
+  const badges = [];
+  if (user.shift?.shifted) badges.push(`<span class="badge badge-shifted">⚡ Shift z=${user.shift.magnitude}</span>`);
+  if (user.coordGroup) badges.push(`<span class="badge badge-ring">🔗 ${user.coordGroup}</span>`);
+  if (!badges.length) badges.push(`<span class="badge badge-stable">✓ Stable</span>`);
 
   card.innerHTML = `
     <div class="card-header">
@@ -134,69 +130,40 @@ function createUserCard(user) {
         <div class="avatar">${user.username[0].toUpperCase()}</div>
         <div>
           <div class="username">u/${user.username}</div>
-          <div class="user-meta">${user.profile.posts}P · ${user.profile.comments}C · ${daysActive}d active</div>
+          <div class="user-meta">${user.profile.posts}P · ${user.profile.comments}C · ${user.profile.edits}E · ${days}d</div>
+          <div class="user-badges">${badges.join('')}</div>
         </div>
       </div>
-      <div>
-        <div class="score-badge ${risk}">${user.score}</div>
-        <div class="score-label">RISK</div>
-      </div>
+      <div><div class="score-badge ${risk}">${user.score}</div><div class="score-label">Risk</div></div>
     </div>
     <div class="signals">
-      <div class="signal">
-        <div class="signal-value" style="color:${signalColor(b.temporal, 30)}">${b.temporal}</div>
-        <div class="signal-label">Temporal</div>
-        <div class="signal-bar"><div class="signal-bar-fill" style="width:${(b.temporal / 30) * 100}%;background:${signalColor(b.temporal, 30)}"></div></div>
-      </div>
-      <div class="signal">
-        <div class="signal-value" style="color:${signalColor(b.circadian, 25)}">${b.circadian}</div>
-        <div class="signal-label">Circadian</div>
-        <div class="signal-bar"><div class="signal-bar-fill" style="width:${(b.circadian / 25) * 100}%;background:${signalColor(b.circadian, 25)}"></div></div>
-      </div>
-      <div class="signal">
-        <div class="signal-value" style="color:${signalColor(b.engagement, 25)}">${b.engagement}</div>
-        <div class="signal-label">Engage</div>
-        <div class="signal-bar"><div class="signal-bar-fill" style="width:${(b.engagement / 25) * 100}%;background:${signalColor(b.engagement, 25)}"></div></div>
-      </div>
-      <div class="signal">
-        <div class="signal-value" style="color:${signalColor(b.editRate, 20)}">${b.editRate}</div>
-        <div class="signal-label">Edit Rate</div>
-        <div class="signal-bar"><div class="signal-bar-fill" style="width:${(b.editRate / 20) * 100}%;background:${signalColor(b.editRate, 20)}"></div></div>
-      </div>
+      ${sig('Temporal', b.temporal, 25)}${sig('Circadian', b.circadian, 20)}${sig('Engage', b.engagement, 20)}${sig('Edit', b.editRate, 15)}${sig('Burst', b.burstSilence, 20)}
     </div>
-    <div class="card-details">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
-        <div class="radar-container">${createRadarSVG(b)}</div>
-        <div>
-          <span class="shift-badge ${user.shift?.shifted ? 'shifted' : 'stable'}">
-            ${user.shift?.shifted ? `⚡ Shift z=${user.shift.magnitude}` : '✓ Stable'}
-          </span>
-        </div>
-      </div>
+    <div class="card-details"><div class="details-inner">
+      <div class="radar-row">${createRadarSVG(b)}</div>
       <div class="card-actions">
         <button class="btn-action" onclick="event.stopPropagation()">👁 Watch</button>
         <button class="btn-action" onclick="event.stopPropagation()">⚠ Restrict</button>
         <button class="btn-action dismiss" onclick="event.stopPropagation();dismissUser('${user.username}')">✕ Dismiss</button>
       </div>
-    </div>
-  `;
+    </div></div>`;
   return card;
 }
 
-function signalColor(value, max) {
-  const ratio = value / max;
-  if (ratio >= 0.7) return '#ff4444';
-  if (ratio >= 0.4) return '#ffab00';
-  return '#00c853';
+function sig(label, value, max) {
+  const c = signalColor(value, max);
+  return `<div class="signal"><div class="signal-value" style="color:${c}">${value}</div>
+    <div class="signal-label">${label}</div>
+    <div class="signal-bar"><div class="signal-bar-fill" style="width:${(value/max)*100}%;background:${c}"></div></div></div>`;
 }
 
-// ─── Event Listeners ────────────────────────────────────────────────────────
+function show(id) { document.getElementById(id).style.display = ''; }
+function hide(id) { document.getElementById(id).style.display = 'none'; }
+
 document.addEventListener('DOMContentLoaded', () => {
   refreshDashboard();
-
   document.getElementById('btn-demo').addEventListener('click', loadDemoData);
   document.getElementById('btn-refresh').addEventListener('click', refreshDashboard);
-
   document.querySelectorAll('.filter-tab').forEach(tab => {
     tab.addEventListener('click', () => {
       document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));

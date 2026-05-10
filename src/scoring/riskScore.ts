@@ -1,10 +1,18 @@
 // ─── Risk Score Aggregation ─────────────────────────────────────────────────
-// Combines all 4 behavioral signals into a single 0-100 risk score.
+// Combines 5 behavioral signals into a single 0-100 risk score.
 // Higher score = more suspicious behavior.
+//
+// Weight distribution (total = 100):
+//   Temporal regularity:  25 pts (inter-arrival CV)
+//   Circadian uniformity: 20 pts (Shannon entropy)
+//   Engagement ratio:     20 pts (post-to-comment)
+//   Edit absence:         15 pts (edit rate)
+//   Burst-silence:        20 pts (max gap / median gap) ← NEW
 
 import {
   computeInterArrivalCV,
   computeCircadianEntropy,
+  computeBurstSilenceRatio,
 } from '../signals/temporal.js';
 import {
   computePostCommentRatio,
@@ -27,6 +35,7 @@ export function computeRiskScore(
       circadian: 0,
       engagement: 0,
       editRate: 0,
+      burstSilence: 0,
       total: 0,
       hasEnoughData: false,
     };
@@ -40,38 +49,47 @@ export function computeRiskScore(
     profile.posts,
     profile.comments
   );
+  const burstRatio = computeBurstSilenceRatio(profile.postTimestamps);
 
-  // Score each signal (0 points if insufficient data, i.e. sentinel -1)
+  // Signal 1 — Temporal regularity (0-25)
   const temporal =
     cv === -1
       ? 0
       : Math.round(
-          30 * Math.max(0, 1 - cv / Math.max(baseline.avgInterArrivalCV, 0.1))
+          25 * Math.max(0, 1 - cv / Math.max(baseline.avgInterArrivalCV, 0.1))
         );
 
+  // Signal 2 — Circadian uniformity (0-20)
   const circadian =
-    entropy === -1 ? 0 : Math.round(25 * (entropy / 4.58));
+    entropy === -1 ? 0 : Math.round(20 * (entropy / 4.58));
 
+  // Signal 3 — Post-to-comment ratio (0-20)
   const engagement =
-    ratio === -1 ? 0 : Math.round(25 * ratio);
+    ratio === -1 ? 0 : Math.round(20 * ratio);
 
+  // Signal 4 — Edit absence (0-15)
   const editScore =
     editRateVal === -1
       ? 0
       : Math.round(
-          20 *
+          15 *
             Math.max(
               0,
               1 - editRateVal / Math.max(baseline.avgEditRate, 0.01)
             )
         );
 
+  // Signal 5 — Burst-silence pattern (0-20)
+  const burstSilence =
+    burstRatio === -1 ? 0 : Math.round(20 * Math.min(1, burstRatio / 30));
+
   return {
     temporal,
     circadian,
     engagement,
     editRate: editScore,
-    total: Math.min(100, temporal + circadian + engagement + editScore),
+    burstSilence,
+    total: Math.min(100, temporal + circadian + engagement + editScore + burstSilence),
     hasEnoughData: true,
   };
 }

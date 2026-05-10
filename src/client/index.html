@@ -3,12 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>BotPrints Dashboard</title>
+  <title>BotPrints — Behavioral Forensics</title>
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
   <div id="app">
-    <!-- Header -->
     <header class="header">
       <div class="header-left">
         <div class="logo">🔬</div>
@@ -18,30 +17,54 @@
         </div>
       </div>
       <div class="header-right">
-        <span class="tracked-badge" id="tracked-count">0 tracked</span>
         <button class="btn btn-demo" id="btn-demo">Load Demo Data</button>
         <button class="btn btn-refresh" id="btn-refresh">↻ Refresh</button>
       </div>
     </header>
 
-    <!-- Filter Tabs -->
+    <!-- Subreddit Health Summary -->
+    <section class="summary-grid" id="summary-grid" style="display:none">
+      <div class="summary-card">
+        <div class="summary-value" id="s-tracked">0</div>
+        <div class="summary-label">Users Tracked</div>
+      </div>
+      <div class="summary-card danger">
+        <div class="summary-value" id="s-highrisk">0</div>
+        <div class="summary-label">High Risk</div>
+      </div>
+      <div class="summary-card warning">
+        <div class="summary-value" id="s-shifted">0</div>
+        <div class="summary-label">Shifted</div>
+      </div>
+      <div class="summary-card accent">
+        <div class="summary-value" id="s-rings">0</div>
+        <div class="summary-label">Bot Rings</div>
+      </div>
+      <div class="summary-card health">
+        <div class="summary-value" id="s-health">—</div>
+        <div class="summary-label">Health Score</div>
+      </div>
+    </section>
+
+    <!-- Coordinated Ring Alert -->
+    <section class="ring-alert" id="ring-alert" style="display:none"></section>
+
+    <!-- Filters -->
     <nav class="filters">
       <button class="filter-tab active" data-filter="all">All</button>
       <button class="filter-tab" data-filter="high">🔴 High Risk</button>
       <button class="filter-tab" data-filter="shifted">⚡ Shifted</button>
+      <button class="filter-tab" data-filter="ring">🔗 Bot Ring</button>
     </nav>
 
-    <!-- User Cards Grid -->
     <main class="grid" id="user-grid"></main>
 
-    <!-- Empty State -->
     <div class="empty-state" id="empty-state" style="display:none">
       <div class="empty-icon">🔍</div>
       <h2>No users analyzed yet</h2>
-      <p>BotPrints silently collects behavioral data from posts and comments. Click <strong>Load Demo Data</strong> to see the dashboard in action, or wait for real activity.</p>
+      <p>Click <strong>Load Demo Data</strong> to see the dashboard in action, or wait for real post/comment activity to be collected.</p>
     </div>
 
-    <!-- Loading State -->
     <div class="loading" id="loading">
       <div class="spinner"></div>
       <p>Analyzing behavioral fingerprints...</p>
