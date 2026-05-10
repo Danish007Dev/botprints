@@ -1,0 +1,49 @@
+{
+  "$schema": "https://developers.reddit.com/schema/config-file.v1.json",
+  "name": "botprintsdev",
+  "server": {
+    "dir": "dist/server",
+    "entry": "index.cjs"
+  },
+  "triggers": {
+    "onAppInstall": "/internal/triggers/on-app-install",
+    "onPostCreate": "/internal/triggers/on-post-create",
+    "onPostUpdate": "/internal/triggers/on-post-update",
+    "onCommentCreate": "/internal/triggers/on-comment-create",
+    "onCommentUpdate": "/internal/triggers/on-comment-update"
+  },
+  "scheduler": {
+    "tasks": {
+      "bp-daily-analysis": {
+        "endpoint": "/internal/scheduler/daily-analysis",
+        "cron": "0 0 * * *"
+      }
+    }
+  },
+  "menu": {
+    "items": [
+      {
+        "label": "📊 Open BotPrints Dashboard",
+        "description": "View behavioral fingerprinting dashboard for your subreddit",
+        "forUserType": "moderator",
+        "location": "subreddit",
+        "endpoint": "/internal/menu/open-dashboard"
+      },
+      {
+        "label": "🔬 Run BotPrints Analysis Now",
+        "description": "Manually trigger behavioral analysis (instead of waiting for daily cron)",
+        "forUserType": "moderator",
+        "location": "subreddit",
+        "endpoint": "/internal/menu/trigger-analysis"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch"
+  },
+  "permissions": {
+    "reddit": true,
+    "redis": true
+  }
+}
