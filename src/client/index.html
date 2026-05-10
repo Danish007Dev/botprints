@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BotPrints Dashboard</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-left">
+        <div class="logo">🔬</div>
+        <div>
+          <h1 class="title">BotPrints</h1>
+          <p class="subtitle">Behavioral Forensics Dashboard</p>
+        </div>
+      </div>
+      <div class="header-right">
+        <span class="tracked-badge" id="tracked-count">0 tracked</span>
+        <button class="btn btn-demo" id="btn-demo">Load Demo Data</button>
+        <button class="btn btn-refresh" id="btn-refresh">↻ Refresh</button>
+      </div>
+    </header>
+
+    <!-- Filter Tabs -->
+    <nav class="filters">
+      <button class="filter-tab active" data-filter="all">All</button>
+      <button class="filter-tab" data-filter="high">🔴 High Risk</button>
+      <button class="filter-tab" data-filter="shifted">⚡ Shifted</button>
+    </nav>
+
+    <!-- User Cards Grid -->
+    <main class="grid" id="user-grid"></main>
+
+    <!-- Empty State -->
+    <div class="empty-state" id="empty-state" style="display:none">
+      <div class="empty-icon">🔍</div>
+      <h2>No users analyzed yet</h2>
+      <p>BotPrints silently collects behavioral data from posts and comments. Click <strong>Load Demo Data</strong> to see the dashboard in action, or wait for real activity.</p>
+    </div>
+
+    <!-- Loading State -->
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <p>Analyzing behavioral fingerprints...</p>
+    </div>
+  </div>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

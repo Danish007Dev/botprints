@@ -5,6 +5,15 @@
     "dir": "dist/server",
     "entry": "index.cjs"
   },
+  "post": {
+    "dir": "dist/client",
+    "entrypoints": {
+      "default": {
+        "entry": "index.html",
+        "height": "tall"
+      }
+    }
+  },
   "triggers": {
     "onAppInstall": "/internal/triggers/on-app-install",
     "onPostCreate": "/internal/triggers/on-post-create",
@@ -24,14 +33,14 @@
     "items": [
       {
         "label": "📊 Open BotPrints Dashboard",
-        "description": "View behavioral fingerprinting dashboard for your subreddit",
+        "description": "Create a BotPrints dashboard post to analyze user behavior",
         "forUserType": "moderator",
         "location": "subreddit",
         "endpoint": "/internal/menu/open-dashboard"
       },
       {
         "label": "🔬 Run BotPrints Analysis Now",
-        "description": "Manually trigger behavioral analysis (instead of waiting for daily cron)",
+        "description": "Manually trigger behavioral analysis",
         "forUserType": "moderator",
         "location": "subreddit",
         "endpoint": "/internal/menu/trigger-analysis"
@@ -45,5 +54,8 @@
   "permissions": {
     "reddit": true,
     "redis": true
+  },
+  "dev": {
+    "subreddit": "botprintsdev_dev"
   }
 }
