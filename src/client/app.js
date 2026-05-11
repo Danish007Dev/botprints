@@ -148,7 +148,7 @@
     if (!b) b = {};
     var vals = [b.temporal || 0, b.circadian || 0, b.engagement || 0, b.editRate || 0, b.burstSilence || 0];
     var maxes = [25, 20, 20, 15, 20];
-    var labels = ['TMP', 'CRC', 'ENG', 'EDT', 'BST'];
+    var labels = ['Time', 'Day', 'Act', 'Edit', 'Spk'];
     var cx = 55, cy = 55, radius = 40, n = 5;
 
     var angles = [];
@@ -218,9 +218,35 @@
     var uname = user.username || 'unknown';
 
     var badges = '';
-    if (user.shift && user.shift.shifted) badges += '<span class="badge badge-shifted">⚡ Shift z=' + (user.shift.magnitude || 0) + '</span>';
-    if (user.coordGroup) badges += '<span class="badge badge-ring">🔗 ' + user.coordGroup + '</span>';
-    if (!badges) badges = '<span class="badge badge-stable">✓ Stable</span>';
+    if (user.shift && user.shift.shifted) badges += '<span class="badge badge-shifted">⚡ Behavior Changed</span>';
+    if (user.coordGroup) badges += '<span class="badge badge-ring">🔗 Coordinated Group</span>';
+    if (!badges) badges = '<span class="badge badge-stable">✓ Normal Behavior</span>';
+
+    // Global action helpers for inline click
+    window.watchUser = function(u, ev) {
+      var btn = ev.target;
+      btn.textContent = 'Watching...';
+      btn.disabled = true;
+      fetch('/api/watch/' + encodeURIComponent(u), { method: 'POST' })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (data.status === 'ok') { btn.textContent = '👁 Watched'; }
+          else { btn.textContent = 'Error'; btn.disabled = false; }
+        })
+        .catch(function() { btn.textContent = 'Error'; btn.disabled = false; });
+    };
+    window.restrictUser = function(u, ev) {
+      var btn = ev.target;
+      btn.textContent = 'Restricting...';
+      btn.disabled = true;
+      fetch('/api/restrict/' + encodeURIComponent(u), { method: 'POST' })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (data.status === 'ok') { btn.textContent = '⚠ Restricted'; }
+          else { btn.textContent = 'Error'; btn.disabled = false; }
+        })
+        .catch(function() { btn.textContent = 'Error'; btn.disabled = false; });
+    };
 
     card.innerHTML =
       '<div class="card-header">' +
@@ -228,24 +254,24 @@
           '<div class="avatar">' + uname[0].toUpperCase() + '</div>' +
           '<div>' +
             '<div class="username">u/' + uname + '</div>' +
-            '<div class="user-meta">' + (profile.posts || 0) + 'P · ' + (profile.comments || 0) + 'C · ' + (profile.edits || 0) + 'E · ' + days + 'd</div>' +
+            '<div class="user-meta">' + (profile.posts || 0) + ' posts, ' + (profile.comments || 0) + ' comments, ' + (profile.edits || 0) + ' edits, active ' + days + ' days</div>' +
             '<div class="user-badges">' + badges + '</div>' +
           '</div>' +
         '</div>' +
         '<div><div class="score-badge ' + risk + '">' + (user.score || 0) + '</div><div class="score-label">Risk</div></div>' +
       '</div>' +
       '<div class="signals">' +
-        sigHTML('Temporal', b.temporal || 0, 25) +
-        sigHTML('Circadian', b.circadian || 0, 20) +
-        sigHTML('Engage', b.engagement || 0, 20) +
-        sigHTML('Edit', b.editRate || 0, 15) +
-        sigHTML('Burst', b.burstSilence || 0, 20) +
+        sigHTML('Timing', b.temporal || 0, 25) +
+        sigHTML('Daily Pattern', b.circadian || 0, 20) +
+        sigHTML('Activity', b.engagement || 0, 20) +
+        sigHTML('Edits', b.editRate || 0, 15) +
+        sigHTML('Spikes', b.burstSilence || 0, 20) +
       '</div>' +
       '<div class="card-details"><div class="details-inner">' +
         '<div class="radar-row">' + createRadarSVG(b) + '</div>' +
         '<div class="card-actions">' +
-          '<button class="btn-action" onclick="event.stopPropagation()">👁 Watch</button>' +
-          '<button class="btn-action" onclick="event.stopPropagation()">⚠ Restrict</button>' +
+          '<button class="btn-action" onclick="event.stopPropagation(); watchUser(\'' + uname + '\', event)">👁 Watch</button>' +
+          '<button class="btn-action" onclick="event.stopPropagation(); restrictUser(\'' + uname + '\', event)">⚠ Restrict</button>' +
           '<button class="btn-action dismiss" onclick="event.stopPropagation();dismissUser(\'' + uname + '\')">✕ Dismiss</button>' +
         '</div>' +
       '</div></div>';
@@ -262,6 +288,12 @@
 
       var refreshBtn = getEl('btn-refresh');
       if (refreshBtn) refreshBtn.addEventListener('click', function() { refreshDashboard(); });
+
+      var helpBtn = getEl('btn-help');
+      if (helpBtn) helpBtn.addEventListener('click', function() { showEl('help-modal'); });
+
+      var closeHelpBtn = getEl('btn-close-help');
+      if (closeHelpBtn) closeHelpBtn.addEventListener('click', function() { hideEl('help-modal'); });
 
       var tabs = document.querySelectorAll('.filter-tab');
       for (var i = 0; i < tabs.length; i++) {

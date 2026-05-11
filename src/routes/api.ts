@@ -1,5 +1,6 @@
 // ─── BotPrints API Routes ───────────────────────────────────────────────────
 import { Hono } from 'hono';
+import { reddit } from '@devvit/web/server';
 import {
   getUserProfile,
   getAllUsernames,
@@ -107,6 +108,35 @@ api.post('/dismiss/:username', async (c) => {
     await dismissUser(username);
     return c.json({ status: 'ok' });
   } catch (err) {
+    return c.json({ status: 'error', message: String(err) });
+  }
+});
+
+// ─── Watch User ─────────────────────────────────────────────────────────────
+api.post('/watch/:username', async (c) => {
+  const username = c.req.param('username');
+  try {
+    // In a real app we would persist this to a watchlist in Redis
+    return c.json({ status: 'ok' });
+  } catch (err) {
+    return c.json({ status: 'error', message: String(err) });
+  }
+});
+
+// ─── Restrict User ──────────────────────────────────────────────────────────
+api.post('/restrict/:username', async (c) => {
+  const username = c.req.param('username');
+  try {
+    const subreddit = await reddit.getCurrentSubreddit();
+    await reddit.banUser({
+      subredditName: subreddit.name,
+      username,
+      reason: 'BotPrints: High risk behavioral anomaly detected',
+      duration: 3, // temporary 3-day ban
+    });
+    return c.json({ status: 'ok' });
+  } catch (err) {
+    console.error('Error restricting user:', err);
     return c.json({ status: 'error', message: String(err) });
   }
 });

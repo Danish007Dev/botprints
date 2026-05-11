@@ -19,6 +19,7 @@
       <div class="header-right">
         <button class="btn btn-demo" id="btn-demo">Load Demo Data</button>
         <button class="btn btn-refresh" id="btn-refresh">↻ Refresh</button>
+        <button class="btn btn-help" id="btn-help">❓ Help</button>
       </div>
     </header>
 
@@ -65,9 +66,36 @@
       <p>Click <strong>Load Demo Data</strong> to see the dashboard in action, or wait for real post/comment activity to be collected.</p>
     </div>
 
-    <div class="loading" id="loading">
+    <div class="loading" id="loading" style="display:none">
       <div class="spinner"></div>
       <p>Analyzing behavioral fingerprints...</p>
+    </div>
+
+    <!-- Help Modal -->
+    <div class="help-modal" id="help-modal" style="display:none">
+      <div class="help-content">
+        <div class="help-header">
+          <h2>How to read BotPrints</h2>
+          <button class="btn-close" id="btn-close-help">✕</button>
+        </div>
+        <div class="help-body">
+          <p><strong>Risk Score (0-100):</strong> Higher score means more bot-like behavior.</p>
+          <p><strong>User Stats:</strong> <br/>
+             • <strong>Posts / Comments:</strong> Volume of activity.<br/>
+             • <strong>Edits:</strong> Number of times they changed their posts/comments.<br/>
+             • <strong>Days Active:</strong> How long we've been tracking them.</p>
+          <p><strong>Badges:</strong><br/>
+             • <strong>✓ Consistent:</strong> Normal, steady behavior.<br/>
+             • <strong>⚡ Shift:</strong> Sudden change in posting patterns (possible account purchase).<br/>
+             • <strong>🔗 Bot Ring:</strong> Posts at the exact same time as other accounts.</p>
+          <p><strong>Signals (Radar Chart):</strong><br/>
+             • <strong>TMP (Temporal):</strong> Unnatural posting speed.<br/>
+             • <strong>CRC (Circadian):</strong> Never sleeps, posts 24/7.<br/>
+             • <strong>ENG (Engage):</strong> Weird post-to-comment ratio.<br/>
+             • <strong>EDT (Edit):</strong> Edits content too frequently.<br/>
+             • <strong>BST (Burst):</strong> Long silence followed by sudden spam.</p>
+        </div>
+      </div>
     </div>
   </div>
   <script type="module" src="./app.js"></script>

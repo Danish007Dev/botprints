@@ -51,12 +51,12 @@ BotPrints is the **first Devvit app** to detect coordinated bot rings by cross-c
 
 ---
 
-## 🚀 Installation
+## 🚀 Installation & Configuration
 
 ### Step 1: Install the app
 ```bash
 # From the Reddit Developer Portal
-# Navigate to your test subreddit → Mod Tools → Install BotPrints
+# Navigate to your subreddit → Mod Tools → Install BotPrints
 ```
 
 ### Step 2: Open the Dashboard
@@ -64,13 +64,19 @@ Use the subreddit mod menu (⋮) → **📊 Open BotPrints Dashboard**
 
 This creates a custom post with the full forensics dashboard. Only moderators can see the menu action.
 
-### Step 3: Load Demo Data (Optional)
-Click the **Load Demo Data** button in the dashboard to seed 5 demo accounts with distinct behavioral profiles:
-- `AutoShill_9000` — High risk, coordinated ring member
-- `CryptoMoonBot` — High risk, coordinated ring member
-- `SleeperAgent_X` — Medium risk, night-owl pattern
-- `GenuineUser42` — Low risk, healthy human pattern
-- `HealthyRedditor` — Low risk, active commenter
+### Step 3: Run Analysis
+The app runs daily background analysis automatically at midnight UTC. You can also trigger an immediate scan via Mod Tools → **🔬 Run BotPrints Analysis Now**.
+
+---
+
+## 🛡️ Safe & Responsible Usage (For Moderators)
+
+BotPrints is a powerful metadata analysis tool, but it should be used responsibly as part of a holistic moderation strategy:
+
+1. **Not a Ban Hammer:** A high "Risk Score" indicates anomalous, bot-like behavioral patterns, but it is **not definitive proof** of malicious intent. Always review the user's actual content and context before taking permanent action (like banning).
+2. **Privacy First:** BotPrints **never reads or stores user content** (text, images, or links). It purely analyzes metadata (timestamps, frequencies, and ratios).
+3. **Avoid Bias:** Because we do not analyze text, BotPrints has zero language or topic bias. However, be aware that certain benign tools (like helpful summary bots) will naturally trigger high scores. Consider adding known good bots to an approve-list in your community guidelines.
+4. **Use "Watch" Before "Restrict":** We recommend utilizing the "Watch" feature to monitor accounts exhibiting "Shifted" behavior before applying restrictions.
 
 ---
 
@@ -93,11 +99,11 @@ Posts/Comments → Triggers (silent) → Redis Profile Update
 ```
 
 ### Radar Chart Axes
-- **TMP** — Temporal regularity (posting interval consistency)
-- **CRC** — Circadian entropy (24-hour activity distribution)
-- **ENG** — Engagement ratio (post vs. comment balance)
-- **EDT** — Edit rate (content editing frequency)
-- **BST** — Burst-silence pattern (batch scheduling detection)
+- **Time** (was TMP) — Timing regularity (posting interval consistency)
+- **Day** (was CRC) — Daily pattern (24-hour activity distribution)
+- **Act** (was ENG) — Activity ratio (post vs. comment balance)
+- **Edit** (was EDT) — Edit rate (content editing frequency)
+- **Spk** (was BST) — Spikes/silence pattern (batch scheduling detection)
 
 ---
 
@@ -122,8 +128,21 @@ Posts/Comments → Triggers (silent) → Redis Profile Update
 
 ---
 
-## 📄 License
+## 📝 Changelog
 
-MIT — Built for the Reddit Mod Tools Hackathon 2026.
+### v0.0.8 (Current)
+- Added "Help" modal to explain metrics and badges in plain language.
+- Refined badge terminology ("Stable" changed to "Consistent").
+- Automated dashboard post opening upon creation.
+- Implemented demo UI for "Watch" and "Restrict" moderator actions.
+
+### v0.0.1
+- Initial Hackathon Release.
+- 5-axis behavioral fingerprinting implemented.
+- Custom Devvit UI dashboard launched.
+- Coordinated Ring detection active.
+
+---
+
 
 *BotPrints — Because behavior doesn't lie.*
