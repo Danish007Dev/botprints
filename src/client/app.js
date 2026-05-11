@@ -1,229 +1,289 @@
-// ─── BotPrints Dashboard Client ─────────────────────────────────────────────
-let currentFilter = 'all';
-let allUsers = [];
-let coordGroups = [];
+// ─── BotPrints Dashboard Client v2 ──────────────────────────────────────────
+// Completely defensive — every DOM access wrapped, every value defaulted.
+(function() {
+  'use strict';
 
-// Null-safe DOM helpers
-function $(id) { return document.getElementById(id); }
-function show(id) { const el = $(id); if (el) el.style.display = ''; }
-function hide(id) { const el = $(id); if (el) el.style.display = 'none'; }
-function setText(id, txt) { const el = $(id); if (el) el.textContent = txt; }
+  var currentFilter = 'all';
+  var allUsers = [];
+  var coordGroups = [];
 
-async function fetchDashboard() {
-  try {
-    const res = await fetch('/api/dashboard');
-    if (!res.ok) throw new Error('API returned ' + res.status);
-    return await res.json();
-  } catch (e) {
-    console.error('BotPrints fetch error:', e);
-    return { users: [], coordGroups: [], summary: null };
+  // Ultra-safe DOM helpers
+  function getEl(id) {
+    try { return document.getElementById(id); } catch(e) { return null; }
   }
-}
-
-async function loadDemoData() {
-  const btn = $('btn-demo');
-  if (btn) { btn.textContent = 'Loading...'; btn.disabled = true; }
-  try {
-    await fetch('/api/load-demo', { method: 'POST' });
-    await refreshDashboard();
-  } catch (e) { console.error('Demo load error:', e); }
-  if (btn) { btn.textContent = 'Load Demo Data'; btn.disabled = false; }
-}
-
-async function dismissUser(username) {
-  try {
-    await fetch('/api/dismiss/' + encodeURIComponent(username), { method: 'POST' });
-    await refreshDashboard();
-  } catch (e) { console.error('Dismiss error:', e); }
-}
-
-async function refreshDashboard() {
-  show('loading');
-  hide('empty-state');
-  hide('summary-grid');
-  hide('ring-alert');
-  const grid = $('user-grid');
-  if (grid) grid.innerHTML = '';
-
-  const data = await fetchDashboard();
-  allUsers = data.users || [];
-  coordGroups = data.coordGroups || [];
-
-  hide('loading');
-
-  if (data.summary && data.summary.totalTracked > 0) {
-    renderSummary(data.summary);
+  function showEl(id) {
+    var el = getEl(id);
+    if (el) el.style.display = '';
   }
-  if (coordGroups.length > 0) {
-    renderRingAlerts(coordGroups);
+  function hideEl(id) {
+    var el = getEl(id);
+    if (el) el.style.display = 'none';
   }
-  renderUsers();
-}
-
-function renderSummary(s) {
-  setText('s-tracked', s.totalTracked);
-  setText('s-highrisk', s.highRiskCount);
-  setText('s-shifted', s.shiftedCount);
-  setText('s-rings', s.coordGroupCount);
-  setText('s-health', s.healthScore);
-  show('summary-grid');
-}
-
-function renderRingAlerts(groups) {
-  const el = $('ring-alert');
-  if (!el) return;
-  el.innerHTML = groups.map(function(g) {
-    var members = g.members.map(function(m) {
-      return '<span class="ring-member">u/' + m + '</span>';
-    }).join('');
-    return '<div class="ring-box">' +
-      '<div class="ring-header">' +
-        '<span class="ring-icon">🔗</span>' +
-        '<span class="ring-title">Coordinated Ring Detected: ' + g.id + '</span>' +
-      '</div>' +
-      '<div class="ring-members">' + members + '</div>' +
-      '<div class="ring-meta">' + g.sharedWindows + ' shared time windows · ' +
-        Math.round(g.avgCorrelation * 100) + '% temporal correlation</div>' +
-    '</div>';
-  }).join('');
-  show('ring-alert');
-}
-
-function renderUsers() {
-  var grid = $('user-grid');
-  if (!grid) return;
-  grid.innerHTML = '';
-
-  var filtered = allUsers;
-  if (currentFilter === 'high') filtered = allUsers.filter(function(u) { return u.score >= 70; });
-  if (currentFilter === 'shifted') filtered = allUsers.filter(function(u) { return u.shift && u.shift.shifted; });
-  if (currentFilter === 'ring') filtered = allUsers.filter(function(u) { return u.coordGroup; });
-
-  if (!filtered.length) { show('empty-state'); return; }
-  hide('empty-state');
-
-  filtered.sort(function(a, b) { return b.score - a.score; });
-  filtered.forEach(function(u) { grid.appendChild(createUserCard(u)); });
-}
-
-function riskClass(s) { return s >= 70 ? 'high' : s >= 40 ? 'medium' : 'low'; }
-
-function signalColor(v, max) {
-  var r = v / max;
-  return r >= 0.7 ? '#ff4757' : r >= 0.4 ? '#ffa502' : '#2ed573';
-}
-
-function createRadarSVG(b) {
-  var vals = [b.temporal || 0, b.circadian || 0, b.engagement || 0, b.editRate || 0, b.burstSilence || 0];
-  var maxes = [25, 20, 20, 15, 20];
-  var labels = ['TMP', 'CRC', 'ENG', 'EDT', 'BST'];
-  var cx = 55, cy = 55, r = 40, n = 5;
-  var angles = [];
-  for (var i = 0; i < n; i++) angles.push((Math.PI * 2 * i) / n - Math.PI / 2);
-
-  var svg = '<svg viewBox="0 0 110 110" width="100" height="100">';
-  // Grid circles
-  [0.25, 0.5, 0.75, 1].forEach(function(s) {
-    svg += '<circle cx="' + cx + '" cy="' + cy + '" r="' + (r*s) + '" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="0.5"/>';
-  });
-  // Axes
-  angles.forEach(function(a) {
-    svg += '<line x1="' + cx + '" y1="' + cy + '" x2="' + (cx+r*Math.cos(a)) + '" y2="' + (cy+r*Math.sin(a)) + '" stroke="rgba(255,255,255,0.06)" stroke-width="0.5"/>';
-  });
-  // Data polygon
-  var pts = [];
-  for (var j = 0; j < n; j++) {
-    var ratio = Math.min(vals[j] / maxes[j], 1);
-    pts.push((cx + r * ratio * Math.cos(angles[j])) + ',' + (cy + r * ratio * Math.sin(angles[j])));
+  function setTxt(id, txt) {
+    var el = getEl(id);
+    if (el) el.textContent = String(txt);
   }
-  var total = vals.reduce(function(a, b) { return a + b; }, 0);
-  var totalMax = maxes.reduce(function(a, b) { return a + b; }, 0);
-  var pct = total / totalMax;
-  var fill = pct > 0.7 ? 'rgba(255,71,87,0.25)' : pct > 0.4 ? 'rgba(255,165,2,0.2)' : 'rgba(46,213,115,0.15)';
-  var stroke = pct > 0.7 ? '#ff4757' : pct > 0.4 ? '#ffa502' : '#2ed573';
-  svg += '<polygon points="' + pts.join(' ') + '" fill="' + fill + '" stroke="' + stroke + '" stroke-width="1.5"/>';
-  // Labels
-  labels.forEach(function(l, idx) {
-    var lx = cx + (r + 13) * Math.cos(angles[idx]);
-    var ly = cy + (r + 13) * Math.sin(angles[idx]);
-    svg += '<text x="' + lx + '" y="' + ly + '" text-anchor="middle" dominant-baseline="central" fill="#8b929a" font-size="6.5" font-family="Inter,sans-serif">' + l + '</text>';
-  });
-  svg += '</svg>';
-  return svg;
-}
 
-function createUserCard(user) {
-  var risk = riskClass(user.score);
-  var card = document.createElement('div');
-  var ringClass = user.coordGroup ? ' in-ring' : '';
-  card.className = 'user-card risk-' + risk + ringClass;
-  card.onclick = function() { card.classList.toggle('expanded'); };
+  // ─── API ────────────────────────────────────────────────────────────────────
+  function fetchDashboard() {
+    return fetch('/api/dashboard')
+      .then(function(res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      })
+      .catch(function(e) {
+        console.error('BotPrints fetch error:', e);
+        return { users: [], coordGroups: [], summary: null };
+      });
+  }
 
-  var days = Math.max(1, Math.round((Date.now() - (user.profile.firstSeen || Date.now())) / 86400000));
-  var b = user.breakdown || {};
-  var p = user.profile || {};
+  function loadDemoData() {
+    var btn = getEl('btn-demo');
+    if (btn) { btn.textContent = 'Loading...'; btn.disabled = true; }
+    return fetch('/api/load-demo', { method: 'POST' })
+      .then(function() { return refreshDashboard(); })
+      .catch(function(e) { console.error('Demo error:', e); })
+      .then(function() {
+        if (btn) { btn.textContent = 'Load Demo Data'; btn.disabled = false; }
+      });
+  }
 
-  var badgesHTML = '';
-  if (user.shift && user.shift.shifted) badgesHTML += '<span class="badge badge-shifted">⚡ Shift z=' + user.shift.magnitude + '</span>';
-  if (user.coordGroup) badgesHTML += '<span class="badge badge-ring">🔗 ' + user.coordGroup + '</span>';
-  if (!badgesHTML) badgesHTML = '<span class="badge badge-stable">✓ Stable</span>';
+  // Make dismissUser globally accessible for onclick handlers
+  window.dismissUser = function(username) {
+    return fetch('/api/dismiss/' + encodeURIComponent(username), { method: 'POST' })
+      .then(function() { return refreshDashboard(); })
+      .catch(function(e) { console.error('Dismiss error:', e); });
+  };
 
-  card.innerHTML =
-    '<div class="card-header">' +
-      '<div class="user-info">' +
-        '<div class="avatar">' + (user.username || '?')[0].toUpperCase() + '</div>' +
-        '<div>' +
-          '<div class="username">u/' + user.username + '</div>' +
-          '<div class="user-meta">' + (p.posts||0) + 'P · ' + (p.comments||0) + 'C · ' + (p.edits||0) + 'E · ' + days + 'd</div>' +
-          '<div class="user-badges">' + badgesHTML + '</div>' +
-        '</div>' +
-      '</div>' +
-      '<div><div class="score-badge ' + risk + '">' + user.score + '</div><div class="score-label">Risk</div></div>' +
-    '</div>' +
-    '<div class="signals">' +
-      sigHTML('Temporal', b.temporal||0, 25) +
-      sigHTML('Circadian', b.circadian||0, 20) +
-      sigHTML('Engage', b.engagement||0, 20) +
-      sigHTML('Edit', b.editRate||0, 15) +
-      sigHTML('Burst', b.burstSilence||0, 20) +
-    '</div>' +
-    '<div class="card-details"><div class="details-inner">' +
-      '<div class="radar-row">' + createRadarSVG(b) + '</div>' +
-      '<div class="card-actions">' +
-        '<button class="btn-action" onclick="event.stopPropagation()">👁 Watch</button>' +
-        '<button class="btn-action" onclick="event.stopPropagation()">⚠ Restrict</button>' +
-        '<button class="btn-action dismiss" onclick="event.stopPropagation();dismissUser(\'' + user.username + '\')">✕ Dismiss</button>' +
-      '</div>' +
-    '</div></div>';
-  return card;
-}
+  function refreshDashboard() {
+    showEl('loading');
+    hideEl('empty-state');
+    hideEl('summary-grid');
+    hideEl('ring-alert');
 
-function sigHTML(label, value, max) {
-  var c = signalColor(value, max);
-  var w = max > 0 ? ((value / max) * 100) : 0;
-  return '<div class="signal">' +
-    '<div class="signal-value" style="color:' + c + '">' + value + '</div>' +
-    '<div class="signal-label">' + label + '</div>' +
-    '<div class="signal-bar"><div class="signal-bar-fill" style="width:' + w + '%;background:' + c + '"></div></div>' +
-  '</div>';
-}
+    var grid = getEl('user-grid');
+    if (grid) grid.innerHTML = '';
 
-// ─── Init ───────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', function() {
-  refreshDashboard();
-
-  var demoBtn = $('btn-demo');
-  if (demoBtn) demoBtn.addEventListener('click', loadDemoData);
-
-  var refreshBtn = $('btn-refresh');
-  if (refreshBtn) refreshBtn.addEventListener('click', refreshDashboard);
-
-  document.querySelectorAll('.filter-tab').forEach(function(tab) {
-    tab.addEventListener('click', function() {
-      document.querySelectorAll('.filter-tab').forEach(function(t) { t.classList.remove('active'); });
-      tab.classList.add('active');
-      currentFilter = tab.getAttribute('data-filter');
+    return fetchDashboard().then(function(data) {
+      allUsers = (data && data.users) || [];
+      coordGroups = (data && data.coordGroups) || [];
+      hideEl('loading');
+      if (data && data.summary && data.summary.totalTracked > 0) {
+        renderSummary(data.summary);
+      }
+      if (coordGroups.length > 0) {
+        renderRingAlerts(coordGroups);
+      }
       renderUsers();
     });
-  });
-});
+  }
+
+  function renderSummary(s) {
+    if (!s) return;
+    setTxt('s-tracked', s.totalTracked || 0);
+    setTxt('s-highrisk', s.highRiskCount || 0);
+    setTxt('s-shifted', s.shiftedCount || 0);
+    setTxt('s-rings', s.coordGroupCount || 0);
+    setTxt('s-health', s.healthScore || 0);
+    showEl('summary-grid');
+  }
+
+  function renderRingAlerts(groups) {
+    var el = getEl('ring-alert');
+    if (!el || !groups || !groups.length) return;
+    var html = '';
+    for (var i = 0; i < groups.length; i++) {
+      var g = groups[i];
+      var members = '';
+      if (g.members) {
+        for (var j = 0; j < g.members.length; j++) {
+          members += '<span class="ring-member">u/' + g.members[j] + '</span>';
+        }
+      }
+      html += '<div class="ring-box">' +
+        '<div class="ring-header">' +
+          '<span class="ring-icon">🔗</span>' +
+          '<span class="ring-title">Coordinated Ring Detected: ' + (g.id || '?') + '</span>' +
+        '</div>' +
+        '<div class="ring-members">' + members + '</div>' +
+        '<div class="ring-meta">' + (g.sharedWindows || 0) + ' shared time windows · ' +
+          Math.round((g.avgCorrelation || 0) * 100) + '% temporal correlation</div>' +
+      '</div>';
+    }
+    el.innerHTML = html;
+    showEl('ring-alert');
+  }
+
+  function renderUsers() {
+    var grid = getEl('user-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+
+    var filtered = allUsers;
+    if (currentFilter === 'high') {
+      filtered = allUsers.filter(function(u) { return u.score >= 70; });
+    } else if (currentFilter === 'shifted') {
+      filtered = allUsers.filter(function(u) { return u.shift && u.shift.shifted; });
+    } else if (currentFilter === 'ring') {
+      filtered = allUsers.filter(function(u) { return u.coordGroup; });
+    }
+
+    if (!filtered.length) { showEl('empty-state'); return; }
+    hideEl('empty-state');
+
+    filtered.sort(function(a, b) { return b.score - a.score; });
+    for (var i = 0; i < filtered.length; i++) {
+      grid.appendChild(createUserCard(filtered[i]));
+    }
+  }
+
+  function riskClass(s) { return s >= 70 ? 'high' : s >= 40 ? 'medium' : 'low'; }
+  function sigColor(v, max) {
+    if (max <= 0) return '#2ed573';
+    var r = v / max;
+    return r >= 0.7 ? '#ff4757' : r >= 0.4 ? '#ffa502' : '#2ed573';
+  }
+
+  function createRadarSVG(b) {
+    if (!b) b = {};
+    var vals = [b.temporal || 0, b.circadian || 0, b.engagement || 0, b.editRate || 0, b.burstSilence || 0];
+    var maxes = [25, 20, 20, 15, 20];
+    var labels = ['TMP', 'CRC', 'ENG', 'EDT', 'BST'];
+    var cx = 55, cy = 55, radius = 40, n = 5;
+
+    var angles = [];
+    for (var i = 0; i < n; i++) angles.push((Math.PI * 2 * i) / n - Math.PI / 2);
+
+    var svg = '<svg viewBox="0 0 110 110" width="100" height="100">';
+
+    // Grid circles
+    var gridLevels = [0.25, 0.5, 0.75, 1];
+    for (var g = 0; g < gridLevels.length; g++) {
+      svg += '<circle cx="' + cx + '" cy="' + cy + '" r="' + (radius * gridLevels[g]) +
+        '" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="0.5"/>';
+    }
+    // Axes
+    for (var a = 0; a < angles.length; a++) {
+      svg += '<line x1="' + cx + '" y1="' + cy +
+        '" x2="' + (cx + radius * Math.cos(angles[a])) +
+        '" y2="' + (cy + radius * Math.sin(angles[a])) +
+        '" stroke="rgba(255,255,255,0.06)" stroke-width="0.5"/>';
+    }
+    // Data polygon
+    var pts = [];
+    for (var d = 0; d < n; d++) {
+      var ratio = maxes[d] > 0 ? Math.min(vals[d] / maxes[d], 1) : 0;
+      pts.push((cx + radius * ratio * Math.cos(angles[d])) + ',' +
+        (cy + radius * ratio * Math.sin(angles[d])));
+    }
+    var total = 0, totalMax = 0;
+    for (var s = 0; s < n; s++) { total += vals[s]; totalMax += maxes[s]; }
+    var pct = totalMax > 0 ? total / totalMax : 0;
+    var fill = pct > 0.7 ? 'rgba(255,71,87,0.25)' : pct > 0.4 ? 'rgba(255,165,2,0.2)' : 'rgba(46,213,115,0.15)';
+    var stroke = pct > 0.7 ? '#ff4757' : pct > 0.4 ? '#ffa502' : '#2ed573';
+    svg += '<polygon points="' + pts.join(' ') + '" fill="' + fill + '" stroke="' + stroke + '" stroke-width="1.5"/>';
+    // Labels
+    for (var l = 0; l < labels.length; l++) {
+      var lx = cx + (radius + 13) * Math.cos(angles[l]);
+      var ly = cy + (radius + 13) * Math.sin(angles[l]);
+      svg += '<text x="' + lx + '" y="' + ly +
+        '" text-anchor="middle" dominant-baseline="central" fill="#8b929a" font-size="6.5">' +
+        labels[l] + '</text>';
+    }
+    svg += '</svg>';
+    return svg;
+  }
+
+  function sigHTML(label, value, max) {
+    var c = sigColor(value, max);
+    var w = max > 0 ? ((value / max) * 100) : 0;
+    return '<div class="signal">' +
+      '<div class="signal-value" style="color:' + c + '">' + value + '</div>' +
+      '<div class="signal-label">' + label + '</div>' +
+      '<div class="signal-bar"><div class="signal-bar-fill" style="width:' + w + '%;background:' + c + '"></div></div>' +
+    '</div>';
+  }
+
+  function createUserCard(user) {
+    if (!user) return document.createElement('div');
+    var risk = riskClass(user.score || 0);
+    var card = document.createElement('div');
+    var ringClass = user.coordGroup ? ' in-ring' : '';
+    card.className = 'user-card risk-' + risk + ringClass;
+    card.onclick = function() { card.classList.toggle('expanded'); };
+
+    var profile = user.profile || {};
+    var days = Math.max(1, Math.round((Date.now() - (profile.firstSeen || Date.now())) / 86400000));
+    var b = user.breakdown || {};
+    var uname = user.username || 'unknown';
+
+    var badges = '';
+    if (user.shift && user.shift.shifted) badges += '<span class="badge badge-shifted">⚡ Shift z=' + (user.shift.magnitude || 0) + '</span>';
+    if (user.coordGroup) badges += '<span class="badge badge-ring">🔗 ' + user.coordGroup + '</span>';
+    if (!badges) badges = '<span class="badge badge-stable">✓ Stable</span>';
+
+    card.innerHTML =
+      '<div class="card-header">' +
+        '<div class="user-info">' +
+          '<div class="avatar">' + uname[0].toUpperCase() + '</div>' +
+          '<div>' +
+            '<div class="username">u/' + uname + '</div>' +
+            '<div class="user-meta">' + (profile.posts || 0) + 'P · ' + (profile.comments || 0) + 'C · ' + (profile.edits || 0) + 'E · ' + days + 'd</div>' +
+            '<div class="user-badges">' + badges + '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div><div class="score-badge ' + risk + '">' + (user.score || 0) + '</div><div class="score-label">Risk</div></div>' +
+      '</div>' +
+      '<div class="signals">' +
+        sigHTML('Temporal', b.temporal || 0, 25) +
+        sigHTML('Circadian', b.circadian || 0, 20) +
+        sigHTML('Engage', b.engagement || 0, 20) +
+        sigHTML('Edit', b.editRate || 0, 15) +
+        sigHTML('Burst', b.burstSilence || 0, 20) +
+      '</div>' +
+      '<div class="card-details"><div class="details-inner">' +
+        '<div class="radar-row">' + createRadarSVG(b) + '</div>' +
+        '<div class="card-actions">' +
+          '<button class="btn-action" onclick="event.stopPropagation()">👁 Watch</button>' +
+          '<button class="btn-action" onclick="event.stopPropagation()">⚠ Restrict</button>' +
+          '<button class="btn-action dismiss" onclick="event.stopPropagation();dismissUser(\'' + uname + '\')">✕ Dismiss</button>' +
+        '</div>' +
+      '</div></div>';
+    return card;
+  }
+
+  // ─── Init ──────────────────────────────────────────────────────────────────
+  function init() {
+    try {
+      refreshDashboard();
+
+      var demoBtn = getEl('btn-demo');
+      if (demoBtn) demoBtn.addEventListener('click', function() { loadDemoData(); });
+
+      var refreshBtn = getEl('btn-refresh');
+      if (refreshBtn) refreshBtn.addEventListener('click', function() { refreshDashboard(); });
+
+      var tabs = document.querySelectorAll('.filter-tab');
+      for (var i = 0; i < tabs.length; i++) {
+        (function(tab) {
+          tab.addEventListener('click', function() {
+            var allTabs = document.querySelectorAll('.filter-tab');
+            for (var j = 0; j < allTabs.length; j++) allTabs[j].classList.remove('active');
+            tab.classList.add('active');
+            currentFilter = tab.getAttribute('data-filter') || 'all';
+            renderUsers();
+          });
+        })(tabs[i]);
+      }
+    } catch (e) {
+      console.error('BotPrints init error:', e);
+    }
+  }
+
+  // Run on load
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
