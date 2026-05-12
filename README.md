@@ -74,32 +74,53 @@ BotPrints provides one-click, deeply integrated moderation actions directly on t
 
 ## 🚀 Installation & Configuration
 
-### Step 1: Install the app
-```bash
-# From the Reddit Developer Portal
-# Navigate to your subreddit → Mod Tools → Install BotPrints
-```
+BotPrints is designed to be plug-and-play for your moderation team. Here’s how to get started:
 
-### Step 2: Open the Dashboard
-Use the subreddit mod menu (⋮) → **📊 Open BotPrints Dashboard**
+### Step 1: Install the App
+1. Navigate to your subreddit’s **Mod Tools** on Reddit.
+2. Under the **Apps** section, search for **BotPrints** and click **Install**.
+3. Accept the required permissions (we only ask for what we absolutely need to analyze metadata).
 
-This creates a custom post with the full forensics dashboard. Only moderators can see the menu action.
+### Step 2: Open the Mod Dashboard
+Once installed, BotPrints lives entirely within Reddit.
+1. Open your subreddit.
+2. Click the **Mod Menu (⋮)** at the top right of the community header.
+3. Select **📊 Open BotPrints Dashboard**.
+*Note: This creates a secure, interactive webview dashboard. **This dashboard is strictly visible only to moderators.** Regular users cannot see your forensics data.*
 
-### Step 3: Run Analysis
-The app runs daily background analysis automatically at midnight UTC. You can also trigger an immediate scan via Mod Tools → **🔬 Run BotPrints Analysis Now**.
+### Step 3: Run the Analysis
+BotPrints works silently in the background, but you are always in control.
+- **Autopilot (Autonomous Mode):** By default, BotPrints runs a daily background analysis at midnight UTC. It quietly crunches the metadata of active users and updates the dashboard.
+- **Manual Override:** Need immediate insights during a suspected raid? Open the **Mod Menu (⋮)** and click **🔬 Run BotPrints Analysis Now** to force an instant behavioral scan.
+
+---
+
+## 🔒 Privacy & Visibility
+
+We built BotPrints with a strict **Privacy-First Architecture**:
+- **Invisible to Users:** Regular users have no idea BotPrints is running. It operates silently in the background, ensuring bad actors cannot easily game or reverse-engineer the detection algorithms.
+- **Zero Content Storage:** We do not read, store, or analyze post text, images, or links. BotPrints relies *exclusively* on behavioral metadata (timestamps, frequencies, and posting ratios). This ensures absolute privacy and completely eliminates language-based or ideological bias.
+- **Mod-Only Access:** All dashboards, alerts, and forensics data are locked behind Reddit's secure moderator authentication.
 
 ---
 
-## 🛡️ Safe & Responsible Usage (For Moderators)
+## 🛡️ Safe & Responsible Usage
 
-BotPrints is a powerful metadata analysis tool, but it should be used responsibly as part of a holistic moderation strategy:
-
-1. **Not a Ban Hammer:** A high "Risk Score" indicates anomalous, bot-like behavioral patterns, but it is **not definitive proof** of malicious intent. Always review the user's actual content and context before taking permanent action (like banning).
-2. **Privacy First:** BotPrints **never reads or stores user content** (text, images, or links). It purely analyzes metadata (timestamps, frequencies, and ratios).
-3. **Avoid Bias:** Because we do not analyze text, BotPrints has zero language or topic bias. However, be aware that certain benign tools (like helpful summary bots) will naturally trigger high scores. Consider adding known good bots to an approve-list in your community guidelines.
-4. **Use "Watch" Before "Restrict":** We recommend utilizing the "Watch" feature to monitor accounts exhibiting "Shifted" behavior before applying restrictions.
+BotPrints is a powerful tool, but it should complement—not replace—human judgment:
+1. **Not a Ban Hammer:** A high "Risk Score" indicates anomalous, machine-like patterns, but it is **not definitive proof** of malicious intent. Always review the user's actual content before taking permanent action.
+2. **Helpful Bots:** Be aware that benign, community-approved tools (like AutoModerator or helpful summary bots) will naturally trigger high scores. Use the **✓ Mark Safe** button to clear them from your dashboard.
+3. **Use "Watch" First:** We highly recommend using the **👁 Watch** feature to silently monitor accounts exhibiting "Shifted" behavior before applying hard restrictions.
+4. **Need Help?** We've built an interactive **Help Center** directly into the dashboard. Just click the `?` icon in the top right corner of the BotPrints app for a quick refresher on interpreting signals.
 
 ---
+
+## 🚀 The Future of BotPrints (We Need You!)
+
+This is just the beginning. Our mission is to build the most sophisticated behavioral forensics engine on Reddit. 
+
+In future updates, we plan to make our detection algorithms even more robust, optimized, and tailored to specific community types. **To do that, we need your precious feedback!** 
+
+If you catch a bot we missed, or if a human gets flagged, please let us know. Your real-world moderation experience is critical to training the next generation of BotPrints.
 
 ## 🔧 How It Works
 
