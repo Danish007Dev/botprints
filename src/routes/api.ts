@@ -12,6 +12,10 @@ import {
   appendScoreHistory,
   updateUserScore,
   dismissUser,
+  undismissUser,
+  getClearedUsernames,
+  addToWatchlist,
+  isUserWatched,
 } from '../storage/index.js';
 import { computeRiskScore } from '../scoring/riskScore.js';
 import { detectBehavioralShift } from '../scoring/shiftDetector.js';
@@ -38,7 +42,21 @@ api.get('/dashboard', async (c) => {
         const breakdown = computeRiskScore(profile, baseline);
         const history = await getScoreHistory(username);
         const shift = detectBehavioralShift(history);
-        scoredUsers.push({ username, score: breakdown.total, breakdown, shift, profile });
+        const isWatched = await isUserWatched(username);
+        scoredUsers.push({ username, score: breakdown.total, breakdown, shift, profile, isWatched });
+      } catch { /* skip */ }
+    }
+
+    const clearedUsernames = await getClearedUsernames();
+    const clearedUsers: ScoredUser[] = [];
+    for (const username of clearedUsernames) {
+      try {
+        const profile = await getUserProfile(username);
+        const breakdown = computeRiskScore(profile, baseline);
+        const history = await getScoreHistory(username);
+        const shift = detectBehavioralShift(history);
+        const isWatched = await isUserWatched(username);
+        clearedUsers.push({ username, score: breakdown.total, breakdown, shift, profile, isWatched, isCleared: true });
       } catch { /* skip */ }
     }
 
@@ -68,7 +86,7 @@ api.get('/dashboard', async (c) => {
       lastScan: baseline.lastComputed || Date.now(),
     };
 
-    return c.json({ users: scoredUsers, coordGroups, summary, baseline });
+    return c.json({ users: scoredUsers, clearedUsers, coordGroups, summary, baseline });
   } catch (err) {
     console.error('BotPrints API error:', err);
     return c.json({
@@ -112,13 +130,37 @@ api.post('/dismiss/:username', async (c) => {
   }
 });
 
+// ─── Undismiss User ─────────────────────────────────────────────────────────
+api.post('/undismiss/:username', async (c) => {
+  const username = c.req.param('username');
+  console.log(`BotPrints API: /undismiss/${username} called`);
+  try {
+    await undismissUser(username);
+    
+    // Immediately calculate risk score so they reappear
+    const profile = await getUserProfile(username);
+    const baseline = await getCommunityBaseline();
+    const breakdown = computeRiskScore(profile, baseline);
+    if (breakdown.hasEnoughData) {
+      await updateUserScore(username, breakdown.total);
+    }
+    
+    return c.json({ status: 'ok' });
+  } catch (err) {
+    return c.json({ status: 'error', message: String(err) });
+  }
+});
+
 // ─── Watch User ─────────────────────────────────────────────────────────────
 api.post('/watch/:username', async (c) => {
   const username = c.req.param('username');
+  console.log(`BotPrints API: /watch/${username} called`);
   try {
-    // In a real app we would persist this to a watchlist in Redis
+    await addToWatchlist(username);
+    console.log(`BotPrints API: Added u/${username} to watchlist in Redis`);
     return c.json({ status: 'ok' });
   } catch (err) {
+    console.error(`BotPrints API: Failed to watch u/${username}:`, err);
     return c.json({ status: 'error', message: String(err) });
   }
 });
@@ -126,18 +168,24 @@ api.post('/watch/:username', async (c) => {
 // ─── Restrict User ──────────────────────────────────────────────────────────
 api.post('/restrict/:username', async (c) => {
   const username = c.req.param('username');
+  console.log(`BotPrints API: /restrict/${username} called`);
   try {
     const subreddit = await reddit.getCurrentSubreddit();
-    await reddit.banUser({
+    await reddit.muteUser({
       subredditName: subreddit.name,
       username,
-      reason: 'BotPrints: High risk behavioral anomaly detected',
-      duration: 3, // temporary 3-day ban
+      note: 'BotPrints: High risk behavioral anomaly detected - Under Review',
     });
+    console.log(`BotPrints API: Successfully muted u/${username} in r/${subreddit.name}`);
     return c.json({ status: 'ok' });
   } catch (err) {
-    console.error('Error restricting user:', err);
-    return c.json({ status: 'error', message: String(err) });
+    const errorString = String(err);
+    if (errorString.includes('CANT_RESTRICT_MODERATOR')) {
+      console.log(`BotPrints API: Denied restricting u/${username} - User is a moderator.`);
+      return c.json({ status: 'error', message: 'You cannot restrict a subreddit moderator.' });
+    }
+    console.error(`BotPrints API: Error restricting u/${username}:`, err);
+    return c.json({ status: 'error', message: errorString });
   }
 });
 
@@ -150,7 +198,8 @@ api.get('/user/:username', async (c) => {
     const breakdown = computeRiskScore(profile, baseline);
     const history = await getScoreHistory(username);
     const shift = detectBehavioralShift(history);
-    return c.json({ username, score: breakdown.total, breakdown, shift, profile });
+    const isWatched = await isUserWatched(username);
+    return c.json({ username, score: breakdown.total, breakdown, shift, profile, isWatched });
   } catch (err) {
     return c.json({ status: 'error', message: String(err) });
   }

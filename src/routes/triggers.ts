@@ -13,7 +13,8 @@ import type {
   OnCommentUpdateRequest,
   TriggerResponse,
 } from '@devvit/web/shared';
-import { getUserProfile, saveUserProfile, registerUser } from '../storage/index.js';
+import { reddit } from '@devvit/web/server';
+import { getUserProfile, saveUserProfile, registerUser, isUserWatched } from '../storage/index.js';
 
 export const triggers = new Hono();
 
@@ -44,8 +45,25 @@ triggers.post('/on-post-create', async (c) => {
     profile.postTimestamps = [...profile.postTimestamps, Date.now()].slice(-50);
     profile.hourBuckets[hour] = (profile.hourBuckets[hour] ?? 0) + 1;
 
+    console.log(`BotPrints: onPostCreate -> Registered post for u/${username}. Total posts: ${profile.posts}`);
+
     await saveUserProfile(username, profile);
     await registerUser(username);
+
+    if (await isUserWatched(username)) {
+      if (input.subreddit?.id) {
+        try {
+          await reddit.modMail.createModInboxConversation({
+            subredditId: input.subreddit.id as any,
+            subject: `BotPrints Watchlist Alert: u/${username}`,
+            bodyMarkdown: `⚠️ **Watched User Activity Detected** ⚠️\n\nThe monitored user u/${username} has just made a new post in r/${input.subreddit.name}.\n\n[Review their activity](https://www.reddit.com/user/${username}) to ensure it follows community guidelines.`
+          });
+          console.log(`BotPrints: Successfully sent Watchlist Modmail for u/${username}`);
+        } catch (e) {
+          console.error('BotPrints: Failed to send watch alert:', e);
+        }
+      }
+    }
 
     return c.json<TriggerResponse>({ status: 'success' }, 200);
   } catch (err) {
@@ -67,8 +85,25 @@ triggers.post('/on-comment-create', async (c) => {
     const profile = await getUserProfile(username);
     profile.comments += 1;
 
+    console.log(`BotPrints: onCommentCreate -> Registered comment for u/${username}. Total comments: ${profile.comments}`);
+
     await saveUserProfile(username, profile);
     await registerUser(username);
+
+    if (await isUserWatched(username)) {
+      if (input.subreddit?.id) {
+        try {
+          await reddit.modMail.createModInboxConversation({
+            subredditId: input.subreddit.id as any,
+            subject: `BotPrints Watchlist Alert: u/${username}`,
+            bodyMarkdown: `⚠️ **Watched User Activity Detected** ⚠️\n\nThe monitored user u/${username} has just made a new comment in r/${input.subreddit.name}.\n\n[Review their activity](https://www.reddit.com/user/${username}) to ensure it follows community guidelines.`
+          });
+          console.log(`BotPrints: Successfully sent Watchlist Modmail for u/${username}`);
+        } catch (e) {
+          console.error('BotPrints: Failed to send watch alert:', e);
+        }
+      }
+    }
 
     return c.json<TriggerResponse>({ status: 'success' }, 200);
   } catch (err) {

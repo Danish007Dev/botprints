@@ -5,6 +5,7 @@
 
   var currentFilter = 'all';
   var allUsers = [];
+  var allClearedUsers = [];
   var coordGroups = [];
 
   // Ultra-safe DOM helpers
@@ -22,6 +23,26 @@
   function setTxt(id, txt) {
     var el = getEl(id);
     if (el) el.textContent = String(txt);
+  }
+
+  // Toast UI
+  function showToast(msg, type) {
+    var t = document.createElement('div');
+    t.className = 'toast toast-' + (type || 'info');
+    t.textContent = msg;
+    t.style.position = 'fixed';
+    t.style.bottom = '20px';
+    t.style.left = '50%';
+    t.style.transform = 'translateX(-50%)';
+    t.style.background = type === 'error' ? '#ff4757' : '#2ed573';
+    t.style.color = '#fff';
+    t.style.padding = '10px 20px';
+    t.style.borderRadius = '20px';
+    t.style.zIndex = '9999';
+    t.style.fontWeight = 'bold';
+    t.style.boxShadow = '0 4px 10px rgba(0,0,0,0.5)';
+    document.body.appendChild(t);
+    setTimeout(function() { document.body.removeChild(t); }, 4000);
   }
 
   // ─── API ────────────────────────────────────────────────────────────────────
@@ -48,11 +69,11 @@
       });
   }
 
-  // Make dismissUser globally accessible for onclick handlers
-  window.dismissUser = function(username) {
+  // Make markSafeUser globally accessible
+  window.markSafeUser = function(username) {
     return fetch('/api/dismiss/' + encodeURIComponent(username), { method: 'POST' })
       .then(function() { return refreshDashboard(); })
-      .catch(function(e) { console.error('Dismiss error:', e); });
+      .catch(function(e) { console.error('Mark safe error:', e); });
   };
 
   function refreshDashboard() {
@@ -66,6 +87,7 @@
 
     return fetchDashboard().then(function(data) {
       allUsers = (data && data.users) || [];
+      allClearedUsers = (data && data.clearedUsers) || [];
       coordGroups = (data && data.coordGroups) || [];
       hideEl('loading');
       if (data && data.summary && data.summary.totalTracked > 0) {
@@ -126,6 +148,8 @@
       filtered = allUsers.filter(function(u) { return u.shift && u.shift.shifted; });
     } else if (currentFilter === 'ring') {
       filtered = allUsers.filter(function(u) { return u.coordGroup; });
+    } else if (currentFilter === 'safe') {
+      filtered = allClearedUsers;
     }
 
     if (!filtered.length) { showEl('empty-state'); return; }
@@ -222,33 +246,76 @@
     if (user.coordGroup) badges += '<span class="badge badge-ring">🔗 Coordinated Group</span>';
     if (!badges) badges = '<span class="badge badge-stable">✓ Normal Behavior</span>';
 
-    // Global action helpers for inline click
-    window.watchUser = function(u, ev) {
-      var btn = ev.target;
+    // Action functions are now internal to this scope since we attach them directly
+    function onWatchUser(u, btn) {
       btn.textContent = 'Watching...';
       btn.disabled = true;
       fetch('/api/watch/' + encodeURIComponent(u), { method: 'POST' })
         .then(function(res) { return res.json(); })
         .then(function(data) {
-          if (data.status === 'ok') { btn.textContent = '👁 Watched'; }
-          else { btn.textContent = 'Error'; btn.disabled = false; }
+          if (data.status === 'ok') { 
+            btn.textContent = '👁 Watched'; 
+            showToast('Watching u/' + u + '. You will receive a Modmail when they post.', 'success');
+          } else { 
+            btn.textContent = 'Error'; btn.disabled = false; 
+            showToast('Failed to watch u/' + u + ': ' + data.message, 'error');
+          }
         })
-        .catch(function() { btn.textContent = 'Error'; btn.disabled = false; });
-    };
-    window.restrictUser = function(u, ev) {
-      var btn = ev.target;
+        .catch(function(err) { 
+          btn.textContent = 'Error'; btn.disabled = false; 
+          showToast('Failed to watch u/' + u + ' (Network error)', 'error');
+        });
+    }
+
+    function onRestrictUser(u, btn) {
       btn.textContent = 'Restricting...';
       btn.disabled = true;
       fetch('/api/restrict/' + encodeURIComponent(u), { method: 'POST' })
         .then(function(res) { return res.json(); })
         .then(function(data) {
-          if (data.status === 'ok') { btn.textContent = '⚠ Restricted'; }
-          else { btn.textContent = 'Error'; btn.disabled = false; }
+          if (data.status === 'ok') { 
+            btn.textContent = '⚠ Restricted'; 
+            showToast('Restricted u/' + u + '. They have been muted.', 'success');
+          } else { 
+            btn.textContent = 'Error'; btn.disabled = false; 
+            showToast('Failed to restrict u/' + u + ': ' + data.message, 'error');
+          }
         })
-        .catch(function() { btn.textContent = 'Error'; btn.disabled = false; });
-    };
+        .catch(function() { 
+          btn.textContent = 'Error'; btn.disabled = false; 
+          showToast('Failed to restrict u/' + u + ' (Network error)', 'error');
+        });
+    }
 
-    card.innerHTML =
+    function onMarkSafeUser(u) {
+      fetch('/api/dismiss/' + encodeURIComponent(u), { method: 'POST' })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (data.status === 'ok') {
+            showToast('Marked u/' + u + ' as safe', 'success');
+            setTimeout(refreshDashboard, 500);
+          } else {
+            showToast('Failed to mark u/' + u + ' as safe', 'error');
+          }
+        })
+        .catch(function() { showToast('Error marking u/' + u + ' safe', 'error'); });
+    }
+
+    function onUndismissUser(u) {
+      fetch('/api/undismiss/' + encodeURIComponent(u), { method: 'POST' })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (data.status === 'ok') {
+            showToast('Re-analyzing u/' + u, 'success');
+            setTimeout(refreshDashboard, 500);
+          } else {
+            showToast('Failed to re-analyze u/' + u, 'error');
+          }
+        })
+        .catch(function() { showToast('Error re-analyzing u/' + u, 'error'); });
+    }
+
+    var html =
       '<div class="card-header">' +
         '<div class="user-info">' +
           '<div class="avatar">' + uname[0].toUpperCase() + '</div>' +
@@ -269,12 +336,43 @@
       '</div>' +
       '<div class="card-details"><div class="details-inner">' +
         '<div class="radar-row">' + createRadarSVG(b) + '</div>' +
-        '<div class="card-actions">' +
-          '<button class="btn-action" onclick="event.stopPropagation(); watchUser(\'' + uname + '\', event)">👁 Watch</button>' +
-          '<button class="btn-action" onclick="event.stopPropagation(); restrictUser(\'' + uname + '\', event)">⚠ Restrict</button>' +
-          '<button class="btn-action dismiss" onclick="event.stopPropagation();dismissUser(\'' + uname + '\')">✕ Dismiss</button>' +
-        '</div>' +
-      '</div></div>';
+        '<div class="card-actions">';
+        
+    if (user.isCleared) {
+      html += '<button class="btn-action action-undismiss" data-user="' + uname + '">↺ Re-Analyze</button>';
+    } else {
+      html += '<button class="btn-action action-watch" data-user="' + uname + '">' + (user.isWatched ? '👁 Watched' : '👁 Watch') + '</button>' +
+        '<button class="btn-action action-restrict" data-user="' + uname + '">⚠ Restrict</button>' +
+        '<button class="btn-action action-safe" data-user="' + uname + '">✓ Mark Safe</button>';
+    }
+    html += '</div></div></div>';
+    card.innerHTML = html;
+
+    // Attach event listeners safely to comply with CSP
+    var watchBtn = card.querySelector('.action-watch');
+    if (watchBtn) watchBtn.addEventListener('click', function(ev) {
+      ev.stopPropagation();
+      onWatchUser(uname, watchBtn);
+    });
+
+    var restrictBtn = card.querySelector('.action-restrict');
+    if (restrictBtn) restrictBtn.addEventListener('click', function(ev) {
+      ev.stopPropagation();
+      onRestrictUser(uname, restrictBtn);
+    });
+
+    var safeBtn = card.querySelector('.action-safe');
+    if (safeBtn) safeBtn.addEventListener('click', function(ev) {
+      ev.stopPropagation();
+      onMarkSafeUser(uname);
+    });
+
+    var undismissBtn = card.querySelector('.action-undismiss');
+    if (undismissBtn) undismissBtn.addEventListener('click', function(ev) {
+      ev.stopPropagation();
+      onUndismissUser(uname);
+    });
+
     return card;
   }
 

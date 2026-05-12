@@ -17,6 +17,7 @@ import {
   updateUserScore,
   getCommunityBaseline,
   saveCommunityBaseline,
+  isUserDismissed,
 } from '../storage/index.js';
 import { computeRiskScore } from '../scoring/riskScore.js';
 import {
@@ -53,24 +54,39 @@ export async function runDailyAnalysis(): Promise<void> {
   }
 
   const baseline = await getCommunityBaseline();
-  const minPosts = 5; // TODO: Read from settings when available
+  const minPosts = 1; // Temporarily reduced to 1 for easier playtesting!
 
   // Score all users
   let analyzed = 0;
   let topScore = 0;
   let topUser = '';
 
+  console.log(`BotPrints: Fetched ${usernames.length} users from storage to analyze.`);
+
   for (const username of usernames) {
     try {
+      if (await isUserDismissed(username)) {
+        console.log(`BotPrints: Skipped u/${username} - User was previously dismissed.`);
+        continue;
+      }
+
+      console.log(`BotPrints: Analyzing u/${username}...`);
       const profile = await getUserProfile(username);
+      console.log(`BotPrints: u/${username} stats - Posts: ${profile.posts}, Comments: ${profile.comments}`);
+
       const scoreBreakdown = computeRiskScore(profile, baseline, minPosts);
 
-      if (!scoreBreakdown.hasEnoughData) continue;
+      if (!scoreBreakdown.hasEnoughData) {
+        console.log(`BotPrints: Skipped u/${username} - Not enough data (requires at least ${minPosts} posts)`);
+        continue;
+      }
 
       await appendScoreHistory(username, scoreBreakdown.total);
       await updateUserScore(username, scoreBreakdown.total);
 
       analyzed++;
+      console.log(`BotPrints: Scored u/${username} -> ${scoreBreakdown.total}`);
+
       if (scoreBreakdown.total > topScore) {
         topScore = scoreBreakdown.total;
         topUser = username;

@@ -51,6 +51,27 @@ BotPrints is the **first Devvit app** to detect coordinated bot rings by cross-c
 
 ---
 
+## 🛠️ Moderator Actions (Dashboard Buttons)
+
+BotPrints provides one-click, deeply integrated moderation actions directly on the dashboard. These actions integrate securely with Reddit's backend APIs:
+
+- **👁 Watch (Watchlist Monitoring)**: 
+  - Adds the user to a permanent, invisible Watchlist backed by Redis.
+  - Whenever a watched user posts or comments anywhere in the subreddit, BotPrints instantly triggers a **Modmail Inbox Alert** containing a direct link to the user's new activity. 
+  - *Best for:* Monitoring "Shifted" accounts or suspicious users before escalating to a ban.
+- **⚠ Restrict (Mute / Cool Off)**: 
+  - Instantly mutes the user from the subreddit (using Reddit's official `reddit.muteUser` API). 
+  - Leaves a secure internal note ("BotPrints: High risk behavioral anomaly detected - Under Review").
+  - *Best for:* Immediate containment of 90+ score accounts and coordinated bot rings.
+- **✓ Mark Safe (Clear)**: 
+  - Clears a false positive or benign bot (e.g. AutoModerator, helpful summary bots) from the High Risk radar.
+  - The user is permanently ignored by future Daily Analysis runs so they don't continually clutter the dashboard.
+- **↺ Re-Analyze (Undo Mark Safe)**: 
+  - Found under the "Safe" filter tab. This reverses a "Mark Safe" decision.
+  - The user is removed from the cleared list, their risk score is instantly re-calculated, and they are placed back into active dashboard monitoring.
+
+---
+
 ## 🚀 Installation & Configuration
 
 ### Step 1: Install the app
@@ -98,12 +119,20 @@ Posts/Comments → Triggers (silent) → Redis Profile Update
                               Mod Dashboard (Custom Post)
 ```
 
-### Radar Chart Axes
-- **Time** (was TMP) — Timing regularity (posting interval consistency)
-- **Day** (was CRC) — Daily pattern (24-hour activity distribution)
-- **Act** (was ENG) — Activity ratio (post vs. comment balance)
-- **Edit** (was EDT) — Edit rate (content editing frequency)
-- **Spk** (was BST) — Spikes/silence pattern (batch scheduling detection)
+### 🎯 Interpreting the Radar Chart (Circle Diagram)
+The BotPrints dashboard features a 5-axis circle diagram (radar chart) for each user. This visualizes their behavioral risk profile at a single glance. 
+
+**How to read it:**
+- **The Center (0 points)** represents perfect, human-like baseline behavior.
+- **The Outer Edge (Max points)** represents highly anomalous, bot-like behavior.
+- The shaded orange/red polygon shows the user's specific behavioral "fingerprint". A large, spiked shape reaching the outer edges indicates a high probability of automated behavior.
+
+**The 5 Axes Explained:**
+1. **Time (Temporal Regularity, 0-25 pts):** A spike here means the user posts with metronomic, machine-like precision (e.g., exactly every 60 minutes). Humans have natural variance; bots use `cron` jobs.
+2. **Day (Circadian Entropy, 0-20 pts):** A spike here means the user is active 24/7 without a daily sleep cycle. Humans sleep; bots post uniformly around the clock.
+3. **Act (Activity Ratio, 0-20 pts):** A spike here indicates heavily skewed engagement—such as an account that submits hundreds of link posts but never leaves a single comment.
+4. **Edit (Edit Rate, 0-15 pts):** A spike here means the user *never* edits their posts or comments, while the rest of the community occasionally corrects typos. AI text generators don't make typos.
+5. **Spk (Spikes/Silence, 0-20 pts):** A spike here reveals batch-processing behavior: the account goes completely silent for days, then dumps 50 posts in a single minute, followed by silence again.
 
 ---
 
@@ -125,22 +154,6 @@ Posts/Comments → Triggers (silent) → Redis Profile Update
 | Daily analysis (1000 users) | < 30 seconds |
 | Dashboard load | < 2 seconds |
 | Memory per user | ~2KB |
-
----
-
-## 📝 Changelog
-
-### v0.0.8 (Current)
-- Added "Help" modal to explain metrics and badges in plain language.
-- Refined badge terminology ("Stable" changed to "Consistent").
-- Automated dashboard post opening upon creation.
-- Implemented demo UI for "Watch" and "Restrict" moderator actions.
-
-### v0.0.1
-- Initial Hackathon Release.
-- 5-axis behavioral fingerprinting implemented.
-- Custom Devvit UI dashboard launched.
-- Coordinated Ring detection active.
 
 ---
 

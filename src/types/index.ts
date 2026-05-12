@@ -66,6 +66,8 @@ export interface ScoredUser {
   shift: ShiftResult;
   profile: UserProfile;
   coordGroup?: string; // group ID if part of a coordinated ring
+  isWatched?: boolean;
+  isCleared?: boolean;
 }
 
 export interface CoordinatedGroup {

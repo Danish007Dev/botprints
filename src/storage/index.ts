@@ -18,4 +18,9 @@ export {
   getTopRiskyUsers,
   dismissUser,
   isUserDismissed,
+  addToWatchlist,
+  removeFromWatchlist,
+  isUserWatched,
+  undismissUser,
+  getClearedUsernames,
 } from './scores.js';

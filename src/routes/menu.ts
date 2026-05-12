@@ -1,6 +1,6 @@
 // ─── BotPrints Menu Action Handlers ─────────────────────────────────────────
 import { Hono } from 'hono';
-import type { MenuItemRequest, UiResponse } from '@devvit/web/shared';
+import type { MenuItemRequest } from '@devvit/web/shared';
 import { reddit } from '@devvit/web/server';
 import { runDailyAnalysis } from './scheduler.js';
 
