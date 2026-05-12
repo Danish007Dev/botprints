@@ -7,6 +7,7 @@
   var allUsers = [];
   var allClearedUsers = [];
   var coordGroups = [];
+  var isDemoLoaded = false;
 
   // Ultra-safe DOM helpers
   function getEl(id) {
@@ -58,14 +59,15 @@
       });
   }
 
-  function loadDemoData() {
+  function toggleDemoData() {
     var btn = getEl('btn-demo');
     if (btn) { btn.textContent = 'Loading...'; btn.disabled = true; }
-    return fetch('/api/load-demo', { method: 'POST' })
+    var endpoint = isDemoLoaded ? '/api/unload-demo' : '/api/load-demo';
+    return fetch(endpoint, { method: 'POST' })
       .then(function() { return refreshDashboard(); })
       .catch(function(e) { console.error('Demo error:', e); })
       .then(function() {
-        if (btn) { btn.textContent = 'Load Demo Data'; btn.disabled = false; }
+        if (btn) btn.disabled = false;
       });
   }
 
@@ -89,7 +91,20 @@
       allUsers = (data && data.users) || [];
       allClearedUsers = (data && data.clearedUsers) || [];
       coordGroups = (data && data.coordGroups) || [];
+      isDemoLoaded = (data && data.isDemoLoaded) || false;
       hideEl('loading');
+      
+      var btn = getEl('btn-demo');
+      if (btn) {
+        if (isDemoLoaded) {
+          btn.textContent = 'Remove Demo Data';
+          btn.classList.add('action-safe');
+        } else {
+          btn.textContent = 'Load Demo Data';
+          btn.classList.remove('action-safe');
+        }
+      }
+
       if (data && data.summary && data.summary.totalTracked > 0) {
         renderSummary(data.summary);
       }
@@ -382,7 +397,7 @@
       refreshDashboard();
 
       var demoBtn = getEl('btn-demo');
-      if (demoBtn) demoBtn.addEventListener('click', function() { loadDemoData(); });
+      if (demoBtn) demoBtn.addEventListener('click', function() { toggleDemoData(); });
 
       var refreshBtn = getEl('btn-refresh');
       if (refreshBtn) refreshBtn.addEventListener('click', function() { refreshDashboard(); });

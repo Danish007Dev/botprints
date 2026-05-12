@@ -1,5 +1,6 @@
 // ─── BotPrints API Routes ───────────────────────────────────────────────────
 import { Hono } from 'hono';
+import { redis } from '@devvit/redis';
 import { reddit } from '@devvit/web/server';
 import {
   getUserProfile,
@@ -86,7 +87,9 @@ api.get('/dashboard', async (c) => {
       lastScan: baseline.lastComputed || Date.now(),
     };
 
-    return c.json({ users: scoredUsers, clearedUsers, coordGroups, summary, baseline });
+    const isDemoLoaded = allUsernames.includes('AutoShill_9000');
+
+    return c.json({ users: scoredUsers, clearedUsers, coordGroups, summary, baseline, isDemoLoaded });
   } catch (err) {
     console.error('BotPrints API error:', err);
     return c.json({
@@ -115,6 +118,27 @@ api.post('/load-demo', async (c) => {
     return c.json({ status: 'ok', loaded: DEMO_PROFILES.length });
   } catch (err) {
     console.error('BotPrints API: Error loading demo:', err);
+    return c.json({ status: 'error', message: String(err) });
+  }
+});
+
+// ─── Unload Demo Data ───────────────────────────────────────────────────────
+api.post('/unload-demo', async (c) => {
+  try {
+    const usernames = DEMO_PROFILES.map(p => p.username);
+    for (const u of usernames) {
+      await redis.del(`bp:user:${u}:profile`);
+      await redis.del(`bp:user:${u}:scoreHistory`);
+      await redis.del(`bp:dismissed:${u}`);
+    }
+    await redis.zRem('bp:users:all', usernames);
+    await redis.zRem('bp:scores:ranked', usernames);
+    await redis.zRem('bp:scores:cleared', usernames);
+    await redis.zRem('bp:scores:watchlist', usernames);
+    
+    return c.json({ status: 'ok', unloaded: usernames.length });
+  } catch (err) {
+    console.error('BotPrints API: Error unloading demo:', err);
     return c.json({ status: 'error', message: String(err) });
   }
 });
