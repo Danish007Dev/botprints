@@ -128,13 +128,20 @@ body {
 .badge-stable { background: var(--bg-badge); color: var(--text-secondary); }
 .badge-ring { background: rgba(165,94,234,0.12); color: var(--accent-purple); }
 
-/* Actions */
-.card-actions { display: flex; gap: 8px; margin-top: 12px; }
-.btn-action { flex: 1; padding: 5px 0; border: 1px solid var(--border); border-radius: var(--radius-sm); background: none;
-  color: var(--text-secondary); font-size: 10px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+/* Actions — 3-Tier Enforcement */
+.card-actions { display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap; }
+.btn-action { flex: 1; min-width: 70px; padding: 5px 4px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: none;
+  color: var(--text-secondary); font-size: 9px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-family: inherit; white-space: nowrap; }
 .btn-action:hover { background: var(--bg-badge); color: var(--text-primary); }
+/* Tier 1: Filter — subtle cyan */
+.btn-action.action-filter:hover { color: var(--accent-cyan); border-color: var(--accent-cyan); }
+/* Tier 2: Remove + Appeal — warning amber */
+.btn-action.action-remove-appeal:hover { color: var(--accent-amber); border-color: var(--accent-amber); background: rgba(255,165,2,0.06); }
+/* Tier 3: Ban + Report — danger red */
+.btn-action.action-ban-report:hover { color: var(--accent-red); border-color: var(--accent-red); background: rgba(255,71,87,0.06); }
+/* Safe + Undismiss */
 .btn-action.action-safe:hover { color: var(--accent-green); border-color: var(--accent-green); }
-.btn-action.action-undismiss:hover { color: var(--accent-orange); border-color: var(--accent-orange); }
+.btn-action.action-undismiss:hover { color: var(--accent-amber); border-color: var(--accent-amber); }
 
 /* Empty & Loading */
 .empty-state { text-align: center; padding: 40px 20px; }

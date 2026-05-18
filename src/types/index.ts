@@ -86,7 +86,31 @@ export interface SubredditSummary {
   lastScan: number;
 }
 
-export type ModAction = 'watch' | 'restrict' | 'dismiss';
+export type ModAction = 'watch' | 'filter' | 'remove-appeal' | 'ban-report' | 'dismiss';
+
+// ─── 3-Tier Enforcement ─────────────────────────────────────────────────────
+// Tier 1 (60-79): Filter to modqueue for human review
+// Tier 2 (80-89): Auto-remove content + appeal flow
+// Tier 3 (90+):   Ban user + report content to admins
+
+export type ActionTier = 'filter' | 'remove-appeal' | 'ban-report';
+
+export interface AuditEntry {
+  timestamp: number;
+  action: ModAction;
+  username: string;
+  performedBy: string; // mod who triggered it
+  details: string;
+}
+
+export interface AppealStatus {
+  username: string;
+  status: 'pending' | 'approved' | 'denied';
+  createdAt: number;
+  removalReason: string;
+  reviewedBy?: string;
+  reviewedAt?: number;
+}
 
 export interface AppSettings {
   minPostsForScoring: number; // default 5

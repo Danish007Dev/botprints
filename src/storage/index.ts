@@ -23,4 +23,13 @@ export {
   isUserWatched,
   undismissUser,
   getClearedUsernames,
+  // 3-Tier Enforcement
+  addToFilterList,
+  removeFromFilterList,
+  isUserFiltered,
+  setAppealStatus,
+  getAppealStatus,
+  clearAppealStatus,
+  appendAuditEntry,
+  getAuditLog,
 } from './scores.js';

@@ -314,23 +314,69 @@
         });
     }
 
-    function onRestrictUser(u, btn) {
-      btn.textContent = 'Restricting...';
+    // ─── Tier 1: Filter → Modqueue ──────────────────────────────────────
+    function onFilterUser(u, btn) {
+      btn.textContent = 'Filtering...';
       btn.disabled = true;
-      fetch('/api/restrict/' + encodeURIComponent(u), { method: 'POST' })
+      fetch('/api/filter/' + encodeURIComponent(u), { method: 'POST' })
         .then(function(res) { return res.json(); })
         .then(function(data) {
-          if (data.status === 'ok') { 
-            btn.textContent = '⚠ Restricted'; 
-            showToast('Restricted u/' + u + '. They have been muted.', 'success');
-          } else { 
-            btn.textContent = 'Error'; btn.disabled = false; 
-            showToast('Failed to restrict u/' + u + ': ' + data.message, 'error');
+          if (data.status === 'ok') {
+            btn.textContent = '🔽 Filtered';
+            showToast('u/' + u + ' content will now be routed to modqueue for review.', 'success');
+          } else {
+            btn.textContent = 'Error'; btn.disabled = false;
+            showToast('Failed to filter u/' + u + ': ' + data.message, 'error');
           }
         })
-        .catch(function() { 
-          btn.textContent = 'Error'; btn.disabled = false; 
-          showToast('Failed to restrict u/' + u + ' (Network error)', 'error');
+        .catch(function() {
+          btn.textContent = 'Error'; btn.disabled = false;
+          showToast('Failed to filter u/' + u + ' (Network error)', 'error');
+        });
+    }
+
+    // ─── Tier 2: Remove + Appeal ────────────────────────────────────────
+    function onRemoveAppeal(u, btn) {
+      if (!confirm('TIER 2: This will remove all recent content from u/' + u + ' and send appeal instructions. Continue?')) return;
+      btn.textContent = 'Removing...';
+      btn.disabled = true;
+      fetch('/api/remove-appeal/' + encodeURIComponent(u), { method: 'POST' })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (data.status === 'ok') {
+            btn.textContent = '⚠ Removed';
+            showToast('Removed ' + (data.removedCount || 0) + ' item(s) from u/' + u + '. Appeal instructions sent via modmail.', 'success');
+          } else {
+            btn.textContent = 'Error'; btn.disabled = false;
+            showToast('Failed: ' + data.message, 'error');
+          }
+        })
+        .catch(function() {
+          btn.textContent = 'Error'; btn.disabled = false;
+          showToast('Failed to remove content for u/' + u + ' (Network error)', 'error');
+        });
+    }
+
+    // ─── Tier 3: Ban + Report ───────────────────────────────────────────
+    function onBanReport(u, btn) {
+      if (!confirm('⚠ TIER 3 — PERMANENT ACTION ⚠\n\nThis will:\n• Permanently ban u/' + u + '\n• Report all their content as spam\n• Remove all their content\n\nThis cannot be undone from the dashboard.\nContinue?')) return;
+      btn.textContent = 'Banning...';
+      btn.disabled = true;
+      fetch('/api/ban-report/' + encodeURIComponent(u), { method: 'POST' })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (data.status === 'ok') {
+            btn.textContent = '🚫 Banned';
+            showToast('u/' + u + ' permanently banned. ' + (data.reportedCount || 0) + ' item(s) reported as spam.', 'success');
+            setTimeout(refreshDashboard, 1000);
+          } else {
+            btn.textContent = 'Error'; btn.disabled = false;
+            showToast('Failed: ' + data.message, 'error');
+          }
+        })
+        .catch(function() {
+          btn.textContent = 'Error'; btn.disabled = false;
+          showToast('Failed to ban u/' + u + ' (Network error)', 'error');
         });
     }
 
@@ -388,8 +434,11 @@
     if (user.isCleared) {
       html += '<button class="btn-action action-undismiss" data-user="' + uname + '">↺ Re-Analyze</button>';
     } else {
+      // 3-Tier Enforcement buttons
       html += '<button class="btn-action action-watch" data-user="' + uname + '">' + (user.isWatched ? '👁 Watched' : '👁 Watch') + '</button>' +
-        '<button class="btn-action action-restrict" data-user="' + uname + '">⚠ Restrict</button>' +
+        '<button class="btn-action action-filter" data-user="' + uname + '">🔽 Filter</button>' +
+        '<button class="btn-action action-remove-appeal" data-user="' + uname + '">⚠ Remove + Appeal</button>' +
+        '<button class="btn-action action-ban-report" data-user="' + uname + '">🚫 Ban + Report</button>' +
         '<button class="btn-action action-safe" data-user="' + uname + '">✓ Mark Safe</button>';
     }
     html += '</div></div></div>';
@@ -402,10 +451,22 @@
       onWatchUser(uname, watchBtn);
     });
 
-    var restrictBtn = card.querySelector('.action-restrict');
-    if (restrictBtn) restrictBtn.addEventListener('click', function(ev) {
+    var filterBtn = card.querySelector('.action-filter');
+    if (filterBtn) filterBtn.addEventListener('click', function(ev) {
       ev.stopPropagation();
-      onRestrictUser(uname, restrictBtn);
+      onFilterUser(uname, filterBtn);
+    });
+
+    var removeAppealBtn = card.querySelector('.action-remove-appeal');
+    if (removeAppealBtn) removeAppealBtn.addEventListener('click', function(ev) {
+      ev.stopPropagation();
+      onRemoveAppeal(uname, removeAppealBtn);
+    });
+
+    var banReportBtn = card.querySelector('.action-ban-report');
+    if (banReportBtn) banReportBtn.addEventListener('click', function(ev) {
+      ev.stopPropagation();
+      onBanReport(uname, banReportBtn);
     });
 
     var safeBtn = card.querySelector('.action-safe');

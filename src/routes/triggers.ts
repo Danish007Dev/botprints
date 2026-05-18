@@ -14,7 +14,16 @@ import type {
   TriggerResponse,
 } from '@devvit/web/shared';
 import { reddit } from '@devvit/web/server';
-import { getUserProfile, saveUserProfile, registerUser, isUserWatched } from '../storage/index.js';
+import {
+  getUserProfile,
+  saveUserProfile,
+  registerUser,
+  isUserWatched,
+  isUserFiltered,
+  getScoreHistory,
+} from '../storage/index.js';
+import { computeRiskScore } from '../scoring/riskScore.js';
+import { getCommunityBaseline } from '../storage/index.js';
 
 export const triggers = new Hono();
 
@@ -24,6 +33,87 @@ triggers.post('/on-app-install', async (c) => {
   console.log('BotPrints installed to subreddit: r/' + input.subreddit?.name);
   return c.json<TriggerResponse>({ status: 'success' }, 200);
 });
+
+// ─── Helper: Get highest signal name from a score breakdown ─────────────────
+function getHighestSignal(breakdown: { temporal: number; circadian: number; engagement: number; editRate: number; burstSilence: number }): string {
+  const signals = [
+    { name: 'Timing regularity', value: breakdown.temporal, max: 25 },
+    { name: 'Circadian pattern (24/7 activity)', value: breakdown.circadian, max: 20 },
+    { name: 'Engagement ratio', value: breakdown.engagement, max: 20 },
+    { name: 'Edit frequency', value: breakdown.editRate, max: 15 },
+    { name: 'Burst-silence pattern', value: breakdown.burstSilence, max: 20 },
+  ];
+  // Sort by normalized value (value/max) descending
+  signals.sort((a, b) => (b.value / b.max) - (a.value / a.max));
+  return signals[0].name;
+}
+
+// ─── Helper: Build watchlist modmail for a specific piece of content ────────
+async function sendWatchAlert(
+  username: string,
+  contentType: 'post' | 'comment',
+  contentUrl: string | undefined,
+  subredditId: string,
+  subredditName: string
+): Promise<void> {
+  try {
+    // Get current risk score for the alert
+    const profile = await getUserProfile(username);
+    const baseline = await getCommunityBaseline();
+    const breakdown = computeRiskScore(profile, baseline);
+    const highestSignal = getHighestSignal(breakdown);
+
+    const directLink = contentUrl
+      ? `[View the ${contentType}](${contentUrl})`
+      : `[View u/${username}'s profile](https://www.reddit.com/user/${username})`;
+
+    await reddit.modMail.createModInboxConversation({
+      subredditId: subredditId as any,
+      subject: `BotPrints Watch Alert — u/${username} just posted in r/${subredditName}`,
+      bodyMarkdown:
+        `🔬 **BotPrints Watch Alert**\n\n` +
+        `**User:** u/${username}\n` +
+        `**Activity:** New ${contentType} in r/${subredditName}\n` +
+        `**Risk Score:** ${breakdown.total}/100\n` +
+        `**Top Signal:** ${highestSignal}\n\n` +
+        `${directLink}\n\n` +
+        `---\n\n` +
+        `**Quick actions:**\n` +
+        `- ✅ Approve — content looks legitimate\n` +
+        `- 🗑️ Remove — remove this ${contentType}\n` +
+        `- 🚫 Ban — ban u/${username} from r/${subredditName}\n\n` +
+        `*Use the moderation tools on the linked ${contentType} to take action.*`,
+    });
+    console.log(`BotPrints: Sent watch alert modmail for u/${username} (${contentType})`);
+  } catch (e) {
+    console.error('BotPrints: Failed to send watch alert:', e);
+  }
+}
+
+// ─── Helper: Filter content to modqueue if user is on the filter list ───────
+async function filterContentIfNeeded(
+  username: string,
+  contentType: 'post' | 'comment',
+  contentId: string | undefined
+): Promise<void> {
+  try {
+    const filtered = await isUserFiltered(username);
+    if (!filtered || !contentId) return;
+
+    // Use the filter/remove API to route content to modqueue
+    if (contentType === 'post') {
+      const post = await reddit.getPostById(contentId);
+      await post.remove(); // Remove from public feed → appears in modqueue
+      console.log(`BotPrints: Filtered post ${contentId} by u/${username} to modqueue`);
+    } else {
+      const comment = await reddit.getCommentById(contentId);
+      await comment.remove(); // Remove from public feed → appears in modqueue
+      console.log(`BotPrints: Filtered comment ${contentId} by u/${username} to modqueue`);
+    }
+  } catch (e) {
+    console.warn(`BotPrints: Could not filter ${contentType} for u/${username}:`, e);
+  }
+}
 
 // ─── onPostCreate ───────────────────────────────────────────────────────────
 // Updates: posts counter, postTimestamps (cap 50), hourBuckets, registers user
@@ -50,18 +140,23 @@ triggers.post('/on-post-create', async (c) => {
     await saveUserProfile(username, profile);
     await registerUser(username);
 
+    // Tier 1: Filter to modqueue if user is on the filter list
+    const postId = input.post?.id;
+    await filterContentIfNeeded(username, 'post', postId);
+
+    // Watchlist alert with direct link to the specific post
     if (await isUserWatched(username)) {
       if (input.subreddit?.id) {
-        try {
-          await reddit.modMail.createModInboxConversation({
-            subredditId: input.subreddit.id as any,
-            subject: `BotPrints Watchlist Alert: u/${username}`,
-            bodyMarkdown: `⚠️ **Watched User Activity Detected** ⚠️\n\nThe monitored user u/${username} has just made a new post in r/${input.subreddit.name}.\n\n[Review their activity](https://www.reddit.com/user/${username}) to ensure it follows community guidelines.`
-          });
-          console.log(`BotPrints: Successfully sent Watchlist Modmail for u/${username}`);
-        } catch (e) {
-          console.error('BotPrints: Failed to send watch alert:', e);
-        }
+        const postUrl = input.post?.permalink
+          ? `https://www.reddit.com${input.post.permalink}`
+          : undefined;
+        await sendWatchAlert(
+          username,
+          'post',
+          postUrl,
+          input.subreddit.id,
+          input.subreddit.name || 'unknown'
+        );
       }
     }
 
@@ -90,18 +185,23 @@ triggers.post('/on-comment-create', async (c) => {
     await saveUserProfile(username, profile);
     await registerUser(username);
 
+    // Tier 1: Filter to modqueue if user is on the filter list
+    const commentId = input.comment?.id;
+    await filterContentIfNeeded(username, 'comment', commentId);
+
+    // Watchlist alert with direct link to the specific comment
     if (await isUserWatched(username)) {
       if (input.subreddit?.id) {
-        try {
-          await reddit.modMail.createModInboxConversation({
-            subredditId: input.subreddit.id as any,
-            subject: `BotPrints Watchlist Alert: u/${username}`,
-            bodyMarkdown: `⚠️ **Watched User Activity Detected** ⚠️\n\nThe monitored user u/${username} has just made a new comment in r/${input.subreddit.name}.\n\n[Review their activity](https://www.reddit.com/user/${username}) to ensure it follows community guidelines.`
-          });
-          console.log(`BotPrints: Successfully sent Watchlist Modmail for u/${username}`);
-        } catch (e) {
-          console.error('BotPrints: Failed to send watch alert:', e);
-        }
+        const commentUrl = input.comment?.permalink
+          ? `https://www.reddit.com${input.comment.permalink}`
+          : undefined;
+        await sendWatchAlert(
+          username,
+          'comment',
+          commentUrl,
+          input.subreddit.id,
+          input.subreddit.name || 'unknown'
+        );
       }
     }
 

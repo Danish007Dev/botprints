@@ -88,3 +88,79 @@ export async function isUserWatched(username: string): Promise<boolean> {
     return false;
   }
 }
+
+// ─── Filter List (Tier 1: modqueue routing) ─────────────────────────────────
+const FILTER_KEY = 'bp:scores:filtered';
+
+export async function addToFilterList(username: string): Promise<void> {
+  await redis.zAdd(FILTER_KEY, { member: username, score: Date.now() });
+}
+
+export async function removeFromFilterList(username: string): Promise<void> {
+  await redis.zRem(FILTER_KEY, [username]);
+}
+
+export async function isUserFiltered(username: string): Promise<boolean> {
+  try {
+    const score = await redis.zScore(FILTER_KEY, username);
+    return score !== undefined;
+  } catch {
+    return false;
+  }
+}
+
+// ─── Appeal Status (Tier 2: remove + appeal) ────────────────────────────────
+const APPEAL_KEY = (u: string): string => `bp:appeal:${u}`;
+
+export async function setAppealStatus(
+  username: string,
+  status: { status: string; removalReason: string; createdAt: number }
+): Promise<void> {
+  await redis.set(APPEAL_KEY(username), JSON.stringify(status));
+}
+
+export async function getAppealStatus(
+  username: string
+): Promise<{ status: string; removalReason: string; createdAt: number } | null> {
+  try {
+    const raw = await redis.get(APPEAL_KEY(username));
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function clearAppealStatus(username: string): Promise<void> {
+  await redis.del(APPEAL_KEY(username));
+}
+
+// ─── Audit Trail ────────────────────────────────────────────────────────────
+const AUDIT_KEY = 'bp:audit:log';
+
+export async function appendAuditEntry(entry: {
+  timestamp: number;
+  action: string;
+  username: string;
+  performedBy: string;
+  details: string;
+}): Promise<void> {
+  // Store as JSON string in a sorted set keyed by timestamp
+  await redis.zAdd(AUDIT_KEY, {
+    member: JSON.stringify(entry),
+    score: entry.timestamp,
+  });
+}
+
+export async function getAuditLog(
+  count: number = 50
+): Promise<Array<{ timestamp: number; action: string; username: string; performedBy: string; details: string }>> {
+  try {
+    const results = await redis.zRange(AUDIT_KEY, 0, count - 1, {
+      by: 'rank',
+      reverse: true,
+    });
+    return results.map((r) => JSON.parse(r.member));
+  } catch {
+    return [];
+  }
+}

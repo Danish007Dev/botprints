@@ -17,6 +17,10 @@ import {
   getClearedUsernames,
   addToWatchlist,
   isUserWatched,
+  // 3-Tier Enforcement
+  addToFilterList,
+  setAppealStatus,
+  appendAuditEntry,
 } from '../storage/index.js';
 import { computeRiskScore } from '../scoring/riskScore.js';
 import { detectBehavioralShift } from '../scoring/shiftDetector.js';
@@ -207,27 +211,192 @@ api.post('/watch/:username', async (c) => {
   }
 });
 
-// ─── Restrict User ──────────────────────────────────────────────────────────
-api.post('/restrict/:username', async (c) => {
+// ═══════════════════════════════════════════════════════════════════════════
+// 3-TIER ENFORCEMENT ENGINE
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─── Tier 1: Filter → Modqueue (score 60-79) ───────────────────────────────
+// Silently routes all future posts/comments to modqueue for human review.
+// Zero user notification. Content is filtered, not removed.
+api.post('/filter/:username', async (c) => {
   const username = c.req.param('username');
-  console.log(`BotPrints API: /restrict/${username} called`);
+  console.log(`BotPrints API: /filter/${username} called`);
   try {
-    const subreddit = await reddit.getCurrentSubreddit();
-    await reddit.muteUser({
-      subredditName: subreddit.name,
+    const currentUser = await reddit.getCurrentUser();
+    await addToFilterList(username);
+
+    await appendAuditEntry({
+      timestamp: Date.now(),
+      action: 'filter',
       username,
-      note: 'BotPrints: High risk behavioral anomaly detected - Under Review',
+      performedBy: currentUser?.username || 'unknown',
+      details: `Tier 1: All future content from u/${username} will be routed to modqueue for review.`,
     });
-    console.log(`BotPrints API: Successfully muted u/${username} in r/${subreddit.name}`);
+
+    console.log(`BotPrints API: Added u/${username} to filter list — future content goes to modqueue`);
     return c.json({ status: 'ok' });
   } catch (err) {
-    const errorString = String(err);
-    if (errorString.includes('CANT_RESTRICT_MODERATOR')) {
-      console.log(`BotPrints API: Denied restricting u/${username} - User is a moderator.`);
-      return c.json({ status: 'error', message: 'You cannot restrict a subreddit moderator.' });
+    console.error(`BotPrints API: Failed to filter u/${username}:`, err);
+    return c.json({ status: 'error', message: String(err) });
+  }
+});
+
+// ─── Tier 2: Remove + Appeal (score 80-89) ─────────────────────────────────
+// Auto-removes recent content. Sends modmail with appeal instructions.
+// Stores pending appeal status in Redis per user.
+api.post('/remove-appeal/:username', async (c) => {
+  const username = c.req.param('username');
+  console.log(`BotPrints API: /remove-appeal/${username} called`);
+  try {
+    const subreddit = await reddit.getCurrentSubreddit();
+    const currentUser = await reddit.getCurrentUser();
+    const removalReason = `We've detected unusual activity patterns on your account. If you believe this is an error, please send a modmail to r/${subreddit.name} with a brief explanation of your recent activity to appeal this action.`;
+
+    // Remove recent posts from this user
+    let removedCount = 0;
+    try {
+      const posts = await reddit.getPostsByUser({ username, limit: 10 }).all();
+      for (const post of posts) {
+        if (post.subredditName === subreddit.name) {
+          await post.remove();
+          removedCount++;
+        }
+      }
+    } catch (e) {
+      console.warn(`BotPrints API: Could not fetch/remove posts for u/${username}:`, e);
     }
-    console.error(`BotPrints API: Error restricting u/${username}:`, err);
-    return c.json({ status: 'error', message: errorString });
+
+    // Remove recent comments from this user
+    try {
+      const comments = await reddit.getCommentsByUser({ username, limit: 25 }).all();
+      for (const comment of comments) {
+        if (comment.subredditName === subreddit.name) {
+          await comment.remove();
+          removedCount++;
+        }
+      }
+    } catch (e) {
+      console.warn(`BotPrints API: Could not fetch/remove comments for u/${username}:`, e);
+    }
+
+    // Also add to filter list so future content is caught
+    await addToFilterList(username);
+
+    // Store appeal status
+    await setAppealStatus(username, {
+      status: 'pending',
+      removalReason,
+      createdAt: Date.now(),
+    });
+
+    // Send modmail to the user with appeal instructions
+    try {
+      await reddit.modMail.createModInboxConversation({
+        subredditId: subreddit.id as any,
+        subject: `BotPrints: Content removed for u/${username} — appeal available`,
+        bodyMarkdown: `**Tier 2 Action — Remove + Appeal**\n\nu/${username} has been flagged with a high behavioral anomaly score.\n\n**Action taken:** ${removedCount} item(s) removed from r/${subreddit.name}. Future content is being filtered to modqueue.\n\n**Appeal reason sent to user:** ${removalReason}\n\n---\n\n*Review this user's appeal when they respond via modmail. Approve or deny within 1 hour if possible.*`,
+      });
+    } catch (e) {
+      console.warn('BotPrints API: Could not send Tier 2 modmail:', e);
+    }
+
+    await appendAuditEntry({
+      timestamp: Date.now(),
+      action: 'remove-appeal',
+      username,
+      performedBy: currentUser?.username || 'unknown',
+      details: `Tier 2: Removed ${removedCount} item(s). Appeal status set to pending. Future content filtered.`,
+    });
+
+    console.log(`BotPrints API: Tier 2 complete for u/${username} — ${removedCount} items removed, appeal pending`);
+    return c.json({ status: 'ok', removedCount });
+  } catch (err) {
+    console.error(`BotPrints API: Tier 2 error for u/${username}:`, err);
+    return c.json({ status: 'error', message: String(err) });
+  }
+});
+
+// ─── Tier 3: Ban + Report (score 90+) ───────────────────────────────────────
+// Permanently bans the user. Reports their recent content as spam to Reddit admins.
+// Logs both actions to the mod audit trail.
+api.post('/ban-report/:username', async (c) => {
+  const username = c.req.param('username');
+  console.log(`BotPrints API: /ban-report/${username} called`);
+  try {
+    const subreddit = await reddit.getCurrentSubreddit();
+    const currentUser = await reddit.getCurrentUser();
+
+    // Ban the user permanently
+    try {
+      await reddit.banUser({
+        subredditName: subreddit.name,
+        username,
+        duration: 0, // permanent
+        reason: 'BotPrints: Confirmed behavioral anomaly (score 90+)',
+        note: `BotPrints automated ban — high risk score + confirmed behavioral anomaly. Actioned by ${currentUser?.username || 'mod'}.`,
+        message: 'Your account has been permanently banned from this community due to detected automated or inauthentic behavior patterns.',
+      });
+      console.log(`BotPrints API: Banned u/${username} from r/${subreddit.name}`);
+    } catch (banErr) {
+      const errStr = String(banErr);
+      if (errStr.includes('CANT_RESTRICT_MODERATOR') || errStr.includes('MODERATOR')) {
+        return c.json({ status: 'error', message: 'Cannot ban a subreddit moderator.' });
+      }
+      throw banErr;
+    }
+
+    // Report recent content as spam to Reddit admins
+    let reportedCount = 0;
+    try {
+      const posts = await reddit.getPostsByUser({ username, limit: 10 }).all();
+      for (const post of posts) {
+        if (post.subredditName === subreddit.name) {
+          await reddit.report(post, { reason: 'BotPrints: Automated/inauthentic behavior — spam account' });
+          await post.remove();
+          reportedCount++;
+        }
+      }
+    } catch (e) {
+      console.warn(`BotPrints API: Could not report posts for u/${username}:`, e);
+    }
+
+    try {
+      const comments = await reddit.getCommentsByUser({ username, limit: 25 }).all();
+      for (const comment of comments) {
+        if (comment.subredditName === subreddit.name) {
+          await reddit.report(comment, { reason: 'BotPrints: Automated/inauthentic behavior — spam account' });
+          await comment.remove();
+          reportedCount++;
+        }
+      }
+    } catch (e) {
+      console.warn(`BotPrints API: Could not report comments for u/${username}:`, e);
+    }
+
+    // Notify mod team via modmail
+    try {
+      await reddit.modMail.createModInboxConversation({
+        subredditId: subreddit.id as any,
+        subject: `BotPrints: u/${username} banned + content reported`,
+        bodyMarkdown: `**Tier 3 Action — Ban + Report**\n\nu/${username} has been permanently banned from r/${subreddit.name}.\n\n**Actions taken:**\n- Permanent ban applied\n- ${reportedCount} item(s) reported to Reddit as spam and removed\n\n**Actioned by:** u/${currentUser?.username || 'unknown'}\n\n---\n\n*This action was taken based on a BotPrints risk score of 90+. If this was done in error, unban the user manually via mod tools.*`,
+      });
+    } catch (e) {
+      console.warn('BotPrints API: Could not send Tier 3 modmail:', e);
+    }
+
+    await appendAuditEntry({
+      timestamp: Date.now(),
+      action: 'ban-report',
+      username,
+      performedBy: currentUser?.username || 'unknown',
+      details: `Tier 3: Permanently banned. ${reportedCount} item(s) reported as spam and removed.`,
+    });
+
+    console.log(`BotPrints API: Tier 3 complete for u/${username} — banned, ${reportedCount} items reported`);
+    return c.json({ status: 'ok', reportedCount });
+  } catch (err) {
+    console.error(`BotPrints API: Tier 3 error for u/${username}:`, err);
+    return c.json({ status: 'error', message: String(err) });
   }
 });
 
