@@ -16,6 +16,19 @@ export async function updateUserScore(
   await redis.zAdd(RANKED_KEY, { member: username, score });
 }
 
+/**
+ * O(1) lookup of a user's cached risk score from the ranked sorted set.
+ * Returns 0 if the user hasn't been scored yet.
+ */
+export async function getCachedRiskScore(username: string): Promise<number> {
+  try {
+    const score = await redis.zScore(RANKED_KEY, username);
+    return score ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
 export async function getTopRiskyUsers(
   count: number = 20
 ): Promise<{ username: string; score: number }[]> {

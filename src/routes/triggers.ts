@@ -1,8 +1,6 @@
 // ─── BotPrints Trigger Handlers ─────────────────────────────────────────────
-// Silent background data collection. No UI output.
-// PERFORMANCE: Each trigger must complete in <100ms.
-// RULES: Max 2 Redis ops per trigger (1 read + 1 write).
-//        No Reddit API calls. No score computation. Always try/catch.
+// Silent background data collection + real-time raid detection.
+// RULES: Always try/catch. No unhandled exceptions.
 
 import { Hono } from 'hono';
 import type {
@@ -20,10 +18,18 @@ import {
   registerUser,
   isUserWatched,
   isUserFiltered,
-  getScoreHistory,
+  getCachedRiskScore,
+  getCommunityBaseline,
+  // Raid detection
+  recordRaidActivity,
+  checkRaidCondition,
+  isRaidCooldownActive,
+  setRaidCooldown,
+  setRaidState,
+  getRaidSettings,
 } from '../storage/index.js';
 import { computeRiskScore } from '../scoring/riskScore.js';
-import { getCommunityBaseline } from '../storage/index.js';
+import type { RaidParticipant } from '../types/index.js';
 
 export const triggers = new Hono();
 
@@ -45,7 +51,7 @@ function getHighestSignal(breakdown: { temporal: number; circadian: number; enga
   ];
   // Sort by normalized value (value/max) descending
   signals.sort((a, b) => (b.value / b.max) - (a.value / a.max));
-  return signals[0].name;
+  return signals[0]!.name;
 }
 
 // ─── Helper: Build watchlist modmail for a specific piece of content ────────
@@ -102,16 +108,123 @@ async function filterContentIfNeeded(
 
     // Use the filter/remove API to route content to modqueue
     if (contentType === 'post') {
-      const post = await reddit.getPostById(contentId);
+      const post = await reddit.getPostById(contentId as `t3_${string}`);
       await post.remove(); // Remove from public feed → appears in modqueue
       console.log(`BotPrints: Filtered post ${contentId} by u/${username} to modqueue`);
     } else {
-      const comment = await reddit.getCommentById(contentId);
+      const comment = await reddit.getCommentById(contentId as `t1_${string}`);
       await comment.remove(); // Remove from public feed → appears in modqueue
       console.log(`BotPrints: Filtered comment ${contentId} by u/${username} to modqueue`);
     }
   } catch (e) {
     console.warn(`BotPrints: Could not filter ${contentType} for u/${username}:`, e);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RAID DETECTION ENGINE
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * O(1) raid check. Called after every post/comment from a scored user.
+ * Steps:
+ *   1. Lookup cached risk score (O(1) zScore)
+ *   2. If score >= threshold, record activity in sliding window
+ *   3. Check if window count >= raid trigger threshold
+ *   4. If yes AND no cooldown → fire raid alert modmail
+ */
+async function checkForRaid(
+  username: string,
+  subredditId: string | undefined,
+  subredditName: string | undefined
+): Promise<void> {
+  try {
+    // 1. Fast cached score lookup — O(1)
+    const cachedScore = await getCachedRiskScore(username);
+    const settings = await getRaidSettings();
+
+    if (cachedScore < settings.minScoreForRaid) {
+      return; // Not suspicious enough to count toward raid
+    }
+
+    // 2. Record this user's activity in the sliding window
+    await recordRaidActivity(username, cachedScore);
+
+    // 3. Check if raid conditions are met
+    const participants = await checkRaidCondition();
+    if (!participants) {
+      return; // Below threshold
+    }
+
+    // 4. Check cooldown — don't fire duplicate alerts
+    if (await isRaidCooldownActive()) {
+      return; // Already alerted recently
+    }
+
+    // 🚨 RAID DETECTED — Fire alert!
+    console.log(`🚨 BotPrints: RAID DETECTED! ${participants.length} suspicious accounts active in last ${settings.triggerWindowMinutes} minutes`);
+
+    // Set cooldown immediately to prevent duplicate alerts
+    await setRaidCooldown();
+
+    // Save raid state for dashboard banner
+    const now = Date.now();
+    await setRaidState({
+      active: true,
+      startedAt: now,
+      participantCount: participants.length,
+      participants: participants.slice(0, 20), // Cap at 20 for storage
+      alertSentAt: now,
+      cooldownEndsAt: now + 2 * 60 * 60 * 1000, // 2 hours
+    });
+
+    // Send raid alert modmail
+    if (subredditId && subredditName) {
+      await sendRaidAlert(participants, subredditId, subredditName);
+    }
+  } catch (e) {
+    // Raid check must never crash the trigger
+    console.warn('BotPrints: Raid check error (non-fatal):', e);
+  }
+}
+
+/**
+ * Send a raid alert modmail to the mod team.
+ */
+async function sendRaidAlert(
+  participants: RaidParticipant[],
+  subredditId: string,
+  subredditName: string
+): Promise<void> {
+  try {
+    const userList = participants
+      .slice(0, 15) // Cap the list to keep modmail readable
+      .map((p) => `- u/${p.username} — Risk Score: **${p.score}**/100`)
+      .join('\n');
+
+    const usernames = participants.map((p) => p.username);
+    const usernameList = usernames.slice(0, 15).map((u) => `u/${u}`).join(', ');
+
+    await reddit.modMail.createModInboxConversation({
+      subredditId: subredditId as any,
+      subject: `🚨 BotPrints RAID ALERT — ${participants.length} suspicious accounts active in r/${subredditName}`,
+      bodyMarkdown:
+        `# 🚨 Raid Alert\n\n` +
+        `**${participants.length} accounts** with high behavioral anomaly scores have posted in r/${subredditName} within the last few minutes.\n\n` +
+        `## Suspicious Accounts\n\n` +
+        `${userList}\n\n` +
+        `---\n\n` +
+        `## Recommended Actions\n\n` +
+        `1. **Check modqueue** — Content from these accounts may already be queued for review\n` +
+        `2. **Open the BotPrints Dashboard** — Use the bulk action tools to Filter or Ban raid participants\n` +
+        `3. **Filter All** — Automatically queue all future content from: ${usernameList}\n\n` +
+        `---\n\n` +
+        `*This alert has a 2-hour cooldown. You will not receive another raid alert for the same event.*\n` +
+        `*Adjust raid detection thresholds in the BotPrints Dashboard settings.*`,
+    });
+    console.log(`BotPrints: Raid alert modmail sent — ${participants.length} participants`);
+  } catch (e) {
+    console.error('BotPrints: Failed to send raid alert modmail:', e);
   }
 }
 
@@ -143,6 +256,9 @@ triggers.post('/on-post-create', async (c) => {
     // Tier 1: Filter to modqueue if user is on the filter list
     const postId = input.post?.id;
     await filterContentIfNeeded(username, 'post', postId);
+
+    // 🚨 Raid detection — check sliding window
+    await checkForRaid(username, input.subreddit?.id, input.subreddit?.name);
 
     // Watchlist alert with direct link to the specific post
     if (await isUserWatched(username)) {
@@ -188,6 +304,9 @@ triggers.post('/on-comment-create', async (c) => {
     // Tier 1: Filter to modqueue if user is on the filter list
     const commentId = input.comment?.id;
     await filterContentIfNeeded(username, 'comment', commentId);
+
+    // 🚨 Raid detection — check sliding window
+    await checkForRaid(username, input.subreddit?.id, input.subreddit?.name);
 
     // Watchlist alert with direct link to the specific comment
     if (await isUserWatched(username)) {

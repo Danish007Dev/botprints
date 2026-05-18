@@ -15,6 +15,7 @@ export {
 
 export {
   updateUserScore,
+  getCachedRiskScore,
   getTopRiskyUsers,
   dismissUser,
   isUserDismissed,
@@ -33,3 +34,16 @@ export {
   appendAuditEntry,
   getAuditLog,
 } from './scores.js';
+
+// Raid Detection
+export {
+  getRaidSettings,
+  saveRaidSettings,
+  recordRaidActivity,
+  checkRaidCondition,
+  isRaidCooldownActive,
+  setRaidCooldown,
+  setRaidState,
+  getRaidState,
+  clearRaidState,
+} from './raid.js';

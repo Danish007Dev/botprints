@@ -21,13 +21,18 @@ import {
   addToFilterList,
   setAppealStatus,
   appendAuditEntry,
+  // Raid Detection
+  getRaidState,
+  clearRaidState,
+  getRaidSettings,
+  saveRaidSettings,
 } from '../storage/index.js';
 import { computeRiskScore } from '../scoring/riskScore.js';
 import { detectBehavioralShift } from '../scoring/shiftDetector.js';
 import { detectCoordinatedGroups } from '../scoring/coordinatedDetector.js';
 import { DEMO_PROFILES } from '../data/demoData.js';
 import { DEFAULT_BASELINE } from '../types/index.js';
-import type { ScoredUser, SubredditSummary } from '../types/index.js';
+import type { ScoredUser, SubredditSummary, RaidSettings } from '../types/index.js';
 
 export const api = new Hono();
 
@@ -411,6 +416,90 @@ api.get('/user/:username', async (c) => {
     const shift = detectBehavioralShift(history);
     const isWatched = await isUserWatched(username);
     return c.json({ username, score: breakdown.total, breakdown, shift, profile, isWatched });
+  } catch (err) {
+    return c.json({ status: 'error', message: String(err) });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RAID DETECTION API
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─── Raid Status (for dashboard banner) ─────────────────────────────────────
+api.get('/raid-status', async (c) => {
+  try {
+    const state = await getRaidState();
+    return c.json({ raid: state });
+  } catch (err) {
+    return c.json({ raid: null });
+  }
+});
+
+// ─── Raid Settings ──────────────────────────────────────────────────────────
+api.get('/raid-settings', async (c) => {
+  try {
+    const settings = await getRaidSettings();
+    return c.json({ status: 'ok', settings });
+  } catch (err) {
+    return c.json({ status: 'error', message: String(err) });
+  }
+});
+
+api.put('/raid-settings', async (c) => {
+  try {
+    const body = await c.req.json<Partial<RaidSettings>>();
+    const current = await getRaidSettings();
+    const updated: RaidSettings = {
+      triggerThreshold: body.triggerThreshold ?? current.triggerThreshold,
+      triggerWindowMinutes: body.triggerWindowMinutes ?? current.triggerWindowMinutes,
+      minScoreForRaid: body.minScoreForRaid ?? current.minScoreForRaid,
+    };
+    await saveRaidSettings(updated);
+    console.log('BotPrints API: Raid settings updated:', JSON.stringify(updated));
+    return c.json({ status: 'ok', settings: updated });
+  } catch (err) {
+    return c.json({ status: 'error', message: String(err) });
+  }
+});
+
+// ─── Bulk Filter All Raid Participants ──────────────────────────────────────
+api.post('/raid-filter-all', async (c) => {
+  try {
+    const state = await getRaidState();
+    if (!state || !state.active) {
+      return c.json({ status: 'error', message: 'No active raid to filter.' });
+    }
+
+    const currentUser = await reddit.getCurrentUser();
+    let filteredCount = 0;
+
+    for (const participant of state.participants) {
+      try {
+        await addToFilterList(participant.username);
+        filteredCount++;
+      } catch { /* skip individual failures */ }
+    }
+
+    await appendAuditEntry({
+      timestamp: Date.now(),
+      action: 'filter',
+      username: `raid:${state.participants.length}_users`,
+      performedBy: currentUser?.username || 'unknown',
+      details: `Bulk Raid Filter: ${filteredCount} participant(s) added to filter list.`,
+    });
+
+    console.log(`BotPrints API: Bulk raid filter applied — ${filteredCount} users filtered`);
+    return c.json({ status: 'ok', filteredCount });
+  } catch (err) {
+    return c.json({ status: 'error', message: String(err) });
+  }
+});
+
+// ─── Clear Raid State ───────────────────────────────────────────────────────
+api.post('/raid-clear', async (c) => {
+  try {
+    await clearRaidState();
+    return c.json({ status: 'ok' });
   } catch (err) {
     return c.json({ status: 'error', message: String(err) });
   }

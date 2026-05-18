@@ -118,3 +118,32 @@ export interface AppSettings {
   enableShiftDetection: boolean; // default true
   demoMode: boolean; // default false
 }
+
+// ─── Raid Detection ─────────────────────────────────────────────────────────
+
+export interface RaidSettings {
+  triggerThreshold: number; // min suspicious accounts to trigger (default 5, range 3-10)
+  triggerWindowMinutes: number; // rolling window in minutes (default 15, range 5-30)
+  minScoreForRaid: number; // min risk score to count toward raid (default 60, range 40-80)
+}
+
+export const DEFAULT_RAID_SETTINGS: RaidSettings = {
+  triggerThreshold: 5,
+  triggerWindowMinutes: 15,
+  minScoreForRaid: 60,
+};
+
+export interface RaidParticipant {
+  username: string;
+  score: number;
+  lastPostTimestamp: number;
+}
+
+export interface RaidState {
+  active: boolean;
+  startedAt: number;
+  participantCount: number;
+  participants: RaidParticipant[];
+  alertSentAt: number;
+  cooldownEndsAt: number;
+}

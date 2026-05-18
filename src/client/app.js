@@ -144,6 +144,9 @@
         renderRingAlerts(coordGroups);
       }
       renderUsers();
+
+      // Poll raid status independently
+      fetchRaidStatus();
     });
   }
 
@@ -181,6 +184,103 @@
     }
     el.innerHTML = html;
     showEl('ring-alert');
+  }
+
+  // ─── Raid Detection UI ──────────────────────────────────────────────────
+
+  function fetchRaidStatus() {
+    fetch('/api/raid-status')
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        if (data && data.raid && data.raid.active) {
+          renderRaidBanner(data.raid);
+        } else {
+          hideRaidBanner();
+        }
+      })
+      .catch(function() { hideRaidBanner(); });
+  }
+
+  function renderRaidBanner(raid) {
+    var container = getEl('raid-banner');
+    if (!container) {
+      // Create the banner element if it doesn't exist
+      container = document.createElement('div');
+      container.id = 'raid-banner';
+      var app = getEl('app');
+      if (app) app.insertBefore(container, app.firstChild);
+    }
+
+    var elapsed = Math.round((Date.now() - raid.startedAt) / 60000);
+    var cooldownRemaining = Math.max(0, Math.round((raid.cooldownEndsAt - Date.now()) / 60000));
+    var participants = raid.participants || [];
+
+    var userList = '';
+    for (var i = 0; i < Math.min(participants.length, 10); i++) {
+      var p = participants[i];
+      userList += '<span class="raid-user">u/' + p.username + ' <span class="raid-score">' + p.score + '</span></span>';
+    }
+    if (participants.length > 10) {
+      userList += '<span class="raid-more">+' + (participants.length - 10) + ' more</span>';
+    }
+
+    container.className = 'raid-banner active';
+    container.innerHTML =
+      '<div class="raid-header">' +
+        '<span class="raid-icon">🚨</span>' +
+        '<span class="raid-title">ACTIVE RAID DETECTED</span>' +
+        '<span class="raid-meta">' + raid.participantCount + ' suspicious accounts · ' + elapsed + ' min ago · cooldown: ' + cooldownRemaining + ' min remaining</span>' +
+      '</div>' +
+      '<div class="raid-users">' + userList + '</div>' +
+      '<div class="raid-actions">' +
+        '<button class="raid-btn raid-btn-filter" id="btn-raid-filter">🔽 Filter All Raid Participants</button>' +
+        '<button class="raid-btn raid-btn-dismiss" id="btn-raid-dismiss">✕ Dismiss Banner</button>' +
+      '</div>';
+
+    // Attach event listeners
+    var filterBtn = getEl('btn-raid-filter');
+    if (filterBtn) filterBtn.addEventListener('click', function(ev) {
+      ev.stopPropagation();
+      onFilterAllRaid(filterBtn);
+    });
+
+    var dismissBtn = getEl('btn-raid-dismiss');
+    if (dismissBtn) dismissBtn.addEventListener('click', function(ev) {
+      ev.stopPropagation();
+      onDismissRaid();
+    });
+  }
+
+  function hideRaidBanner() {
+    var container = getEl('raid-banner');
+    if (container) container.className = 'raid-banner';
+  }
+
+  function onFilterAllRaid(btn) {
+    if (!confirm('This will filter ALL future content from every participant in this raid to modqueue. Continue?')) return;
+    btn.textContent = 'Filtering...';
+    btn.disabled = true;
+    fetch('/api/raid-filter-all', { method: 'POST' })
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        if (data.status === 'ok') {
+          btn.textContent = '✓ All Filtered';
+          showToast('Filtered ' + (data.filteredCount || 0) + ' raid participant(s). Their future content will go to modqueue.', 'success');
+        } else {
+          btn.textContent = 'Error'; btn.disabled = false;
+          showToast('Failed: ' + data.message, 'error');
+        }
+      })
+      .catch(function() {
+        btn.textContent = 'Error'; btn.disabled = false;
+        showToast('Failed to filter raid participants (Network error)', 'error');
+      });
+  }
+
+  function onDismissRaid() {
+    fetch('/api/raid-clear', { method: 'POST' })
+      .then(function() { hideRaidBanner(); })
+      .catch(function() { hideRaidBanner(); });
   }
 
   function renderUsers() {
