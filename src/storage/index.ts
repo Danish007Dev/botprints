@@ -66,3 +66,10 @@ export {
   pushSharedThreat,
   checkSharedThreat,
 } from './threats.js';
+
+// Ban Evasion Fingerprints
+export {
+  storeBanFingerprint,
+  matchBanFingerprint,
+  buildFingerprintVector,
+} from './fingerprints.js';

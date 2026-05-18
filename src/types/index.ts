@@ -9,6 +9,18 @@ export interface SharedThreat {
   confidence: number;
 }
 
+// Ban Evasion Fingerprinting
+export interface BanFingerprint {
+  vector: number[]; // normalized 5-element: [temporal, circadian, engagement, editRate, burstSilence]
+  bannedAt: number;
+  originalUsername: string;
+}
+
+export interface BanEvasionMatch {
+  similarity: number;           // 0-1 cosine similarity
+  matchedFingerprint: BanFingerprint;
+}
+
 export interface UserProfile {
   username: string;
   posts: number;
@@ -19,6 +31,7 @@ export interface UserProfile {
   firstSeen: number;
   lastUpdated: number;
   sharedThreat?: SharedThreat;
+  banEvasionMatch?: BanEvasionMatch;
 }
 
 export interface CommunityBaseline {
@@ -76,6 +89,7 @@ export interface ScoredUser {
   coordGroup?: string; // group ID if part of a coordinated ring
   suggestedRule?: string; // AutoMod YAML string
   ruleReason?: string; // Reason for generating the rule
+  banEvasionMatch?: BanEvasionMatch; // Fingerprint match result
   isWatched?: boolean;
   isCleared?: boolean;
 }

@@ -35,6 +35,7 @@ import {
   getAllPendingAppeals,
   incrementMetric,
   getDashboardMetrics,
+  storeBanFingerprint,
 } from '../storage/index.js';
 import { computeRiskScore } from '../scoring/riskScore.js';
 import { detectBehavioralShift } from '../scoring/shiftDetector.js';
@@ -80,7 +81,11 @@ api.get('/dashboard', async (c) => {
         const history = await getScoreHistory(username);
         const shift = detectBehavioralShift(history);
         const isWatched = await isUserWatched(username);
-        scoredUsers.push({ username, score: breakdown.total, breakdown, shift, profile, isWatched });
+        const entry: ScoredUser = { username, score: breakdown.total, breakdown, shift, profile, isWatched };
+        if (profile.banEvasionMatch) {
+          entry.banEvasionMatch = profile.banEvasionMatch;
+        }
+        scoredUsers.push(entry);
       } catch { /* skip */ }
     }
 
@@ -482,6 +487,18 @@ api.post('/appeals/:username/escalate', async (c) => {
     await incrementMetric('bans_issued', 1);
     await incrementMetric('appeals_responded', 1); // An escalated appeal likely implies a response was evaluated
 
+    // Store behavioral fingerprint for ban evasion detection
+    try {
+      const profile = await getUserProfile(username);
+      const baseline = await getCommunityBaseline();
+      const breakdown = computeRiskScore(profile, baseline);
+      if (breakdown.hasEnoughData) {
+        await storeBanFingerprint(username, breakdown);
+      }
+    } catch (fpErr) {
+      console.warn(`BotPrints: Could not store ban fingerprint for u/${username}:`, fpErr);
+    }
+
     return c.json({ status: 'ok' });
   } catch (err) {
     return c.json({ status: 'error', message: String(err) });
@@ -549,6 +566,18 @@ api.post('/ban-report/:username', async (c) => {
     await incrementMetric('bans_issued', 1);
     await incrementMetric('items_filtered', reportedCount);
     await incrementMetric('accounts_actioned', 1);
+
+    // Store behavioral fingerprint for ban evasion detection
+    try {
+      const profile = await getUserProfile(username);
+      const baseline = await getCommunityBaseline();
+      const breakdown = computeRiskScore(profile, baseline);
+      if (breakdown.hasEnoughData) {
+        await storeBanFingerprint(username, breakdown);
+      }
+    } catch (fpErr) {
+      console.warn(`BotPrints: Could not store ban fingerprint for u/${username}:`, fpErr);
+    }
 
     // Notify mod team via modmail
     try {

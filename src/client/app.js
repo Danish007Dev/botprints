@@ -533,6 +533,10 @@
     var uname = user.username || 'unknown';
 
     var badges = '';
+    if (user.banEvasionMatch || (profile.banEvasionMatch)) {
+      var bem = user.banEvasionMatch || profile.banEvasionMatch;
+      badges += '<span class="badge badge-evader">🕵️‍♂️ Ban Evader: ' + Math.round(bem.similarity * 100) + '% match to u/' + bem.matchedFingerprint.originalUsername + '</span>';
+    }
     if (profile.sharedThreat) {
       badges += '<span class="badge badge-threat">🌐 Shared Intel: Detected in r/' + profile.sharedThreat.originSubreddit + '</span>';
     }
@@ -675,8 +679,36 @@
         sigHTML('Spikes', b.burstSilence || 0, 20) +
       '</div>' +
       '<div class="card-details"><div class="details-inner">' +
-        '<div class="radar-row">' + createRadarSVG(b) + '</div>' +
-        '<div class="card-actions">';
+        '<div class="radar-row">' + createRadarSVG(b) + '</div>';
+
+    // Ban evasion fingerprint comparison
+    var bem2 = user.banEvasionMatch || (profile.banEvasionMatch);
+    if (bem2) {
+      var fp = bem2.matchedFingerprint;
+      var bannedBreakdown = {
+        temporal: Math.round((fp.vector[0] || 0) * 25),
+        circadian: Math.round((fp.vector[1] || 0) * 20),
+        engagement: Math.round((fp.vector[2] || 0) * 20),
+        editRate: Math.round((fp.vector[3] || 0) * 15),
+        burstSilence: Math.round((fp.vector[4] || 0) * 20)
+      };
+      html += '<div class="fingerprint-compare" style="margin-top: 12px; padding: 10px; background: rgba(255, 87, 34, 0.08); border: 1px solid rgba(255, 87, 34, 0.25); border-radius: 6px;">' +
+        '<div style="font-size: 11px; color: #ff5722; font-weight: 600; margin-bottom: 8px;">\ud83d\udd75\ufe0f FINGERPRINT COMPARISON (' + Math.round(bem2.similarity * 100) + '% match)</div>' +
+        '<div style="display: flex; gap: 20px; align-items: center; justify-content: center;">' +
+          '<div style="text-align: center;">' +
+            '<div style="font-size: 10px; color: var(--text-secondary); margin-bottom: 4px;">u/' + uname + ' (New)</div>' +
+            createRadarSVG(b) +
+          '</div>' +
+          '<div style="font-size: 18px; color: #ff5722;">\u2194</div>' +
+          '<div style="text-align: center;">' +
+            '<div style="font-size: 10px; color: var(--text-secondary); margin-bottom: 4px;">u/' + fp.originalUsername + ' (Banned)</div>' +
+            createRadarSVG(bannedBreakdown) +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    }
+
+    html += '<div class="card-actions">';
         
     if (user.isCleared) {
       html += '<button class="btn-action action-undismiss" data-user="' + uname + '">↺ Re-Analyze</button>';
