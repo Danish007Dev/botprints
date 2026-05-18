@@ -31,6 +31,7 @@ export {
   setAppealStatus,
   getAppealStatus,
   clearAppealStatus,
+  getAllPendingAppeals,
   appendAuditEntry,
   getAuditLog,
 } from './scores.js';

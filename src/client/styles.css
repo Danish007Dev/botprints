@@ -455,6 +455,63 @@ body {
 .spinner { width: 28px; height: 28px; margin: 0 auto; border: 3px solid var(--border);
   border-top-color: var(--accent-cyan); border-radius: 50%; animation: spin 0.7s linear infinite; }
 
+/* Appeals View Elements */
+.appeal-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin-bottom: 12px;
+}
+.appeal-info {
+  flex: 1;
+}
+.appeal-user {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+.appeal-timer {
+  font-size: 12px;
+  color: var(--accent-cyan);
+  font-family: monospace;
+}
+.appeal-timer.expired {
+  color: var(--accent-red);
+}
+.appeal-reason {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 6px;
+  font-style: italic;
+}
+.appeal-actions {
+  display: flex;
+  gap: 8px;
+}
+.btn-approve {
+  background: var(--bg-badge);
+  color: #34c759;
+  border: 1px solid rgba(52, 199, 89, 0.2);
+}
+.btn-approve:hover { background: rgba(52, 199, 89, 0.1); }
+.btn-extend {
+  background: var(--bg-badge);
+  color: var(--accent-cyan);
+  border: 1px solid rgba(24, 220, 255, 0.2);
+}
+.btn-extend:hover { background: rgba(24, 220, 255, 0.1); }
+.btn-escalate {
+  background: var(--bg-badge);
+  color: var(--accent-red);
+  border: 1px solid rgba(255, 69, 58, 0.2);
+}
+.btn-escalate:hover { background: rgba(255, 69, 58, 0.1); }
+
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
 
@@ -644,3 +701,4 @@ body {
   background: rgba(255,255,255,0.1);
   color: var(--text-primary);
 }
+.nav-badge { background: var(--accent-red); color: #fff; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 10px; margin-left: 6px; vertical-align: middle; }

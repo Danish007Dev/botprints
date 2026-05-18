@@ -124,17 +124,25 @@ export async function isUserFiltered(username: string): Promise<boolean> {
 
 // ─── Appeal Status (Tier 2: remove + appeal) ────────────────────────────────
 const APPEAL_KEY = (u: string): string => `bp:appeal:${u}`;
+const PENDING_APPEALS_SET = 'bp:appeals:pending';
 
 export async function setAppealStatus(
   username: string,
-  status: { status: string; removalReason: string; createdAt: number }
+  status: { status: string; removalReason: string; createdAt: number; expiresAt?: number; username?: string; }
 ): Promise<void> {
-  await redis.set(APPEAL_KEY(username), JSON.stringify(status));
+  const fullStatus = { ...status, username };
+  await redis.set(APPEAL_KEY(username), JSON.stringify(fullStatus));
+  
+  if (status.status === 'pending') {
+    await redis.zAdd(PENDING_APPEALS_SET, { member: username, score: status.expiresAt || status.createdAt });
+  } else {
+    await redis.zRem(PENDING_APPEALS_SET, [username]);
+  }
 }
 
 export async function getAppealStatus(
   username: string
-): Promise<{ status: string; removalReason: string; createdAt: number } | null> {
+): Promise<{ status: string; removalReason: string; createdAt: number; expiresAt?: number; username: string; } | null> {
   try {
     const raw = await redis.get(APPEAL_KEY(username));
     return raw ? JSON.parse(raw) : null;
@@ -145,6 +153,25 @@ export async function getAppealStatus(
 
 export async function clearAppealStatus(username: string): Promise<void> {
   await redis.del(APPEAL_KEY(username));
+  await redis.zRem(PENDING_APPEALS_SET, [username]);
+}
+
+export async function getAllPendingAppeals(): Promise<Array<{ status: string; removalReason: string; createdAt: number; expiresAt?: number; username: string; }>> {
+  try {
+    const usernames = await redis.zRange(PENDING_APPEALS_SET, 0, -1);
+    if (!usernames || usernames.length === 0) return [];
+    
+    const results = [];
+    for (const u of usernames) {
+      const appeal = await getAppealStatus(u.member);
+      if (appeal && appeal.status === 'pending') {
+        results.push(appeal);
+      }
+    }
+    return results;
+  } catch {
+    return [];
+  }
 }
 
 // ─── Audit Trail ────────────────────────────────────────────────────────────

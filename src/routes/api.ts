@@ -31,6 +31,8 @@ import {
   saveAutoActionSettings,
   // Audit
   getAuditLog,
+  // Appeals
+  getAllPendingAppeals,
 } from '../storage/index.js';
 import { computeRiskScore } from '../scoring/riskScore.js';
 import { detectBehavioralShift } from '../scoring/shiftDetector.js';
@@ -260,7 +262,21 @@ api.post('/remove-appeal/:username', async (c) => {
   try {
     const subreddit = await reddit.getCurrentSubreddit();
     const currentUser = await reddit.getCurrentUser();
-    const removalReason = `We've detected unusual activity patterns on your account. If you believe this is an error, please send a modmail to r/${subreddit.name} with a brief explanation of your recent activity to appeal this action.`;
+    // Load configured appeal message
+    const settings = await getAutoActionSettings();
+    const rawReason = settings.appealMessage || `We've detected unusual activity patterns on your account. Please send a modmail to appeal.`;
+    const removalReason = rawReason
+      .replace(/\{username\}/g, username)
+      .replace(/\{subreddit\}/g, subreddit.name);
+
+    // Calculate expiry based on timeout
+    let expiresAt: number | undefined;
+    if (settings.appealTimeout !== 'never') {
+      const hours = parseInt(settings.appealTimeout.replace('h', ''), 10);
+      if (!isNaN(hours)) {
+        expiresAt = Date.now() + hours * 60 * 60 * 1000;
+      }
+    }
 
     // Remove recent posts from this user
     let removedCount = 0;
@@ -297,17 +313,21 @@ api.post('/remove-appeal/:username', async (c) => {
       status: 'pending',
       removalReason,
       createdAt: Date.now(),
+      expiresAt,
     });
 
-    // Send modmail to the user with appeal instructions
+    // Send modmail TO THE USER with appeal instructions
     try {
-      await reddit.modMail.createModInboxConversation({
-        subredditId: subreddit.id as any,
-        subject: `BotPrints: Content removed for u/${username} — appeal available`,
-        bodyMarkdown: `**Tier 2 Action — Remove + Appeal**\n\nu/${username} has been flagged with a high behavioral anomaly score.\n\n**Action taken:** ${removedCount} item(s) removed from r/${subreddit.name}. Future content is being filtered to modqueue.\n\n**Appeal reason sent to user:** ${removalReason}\n\n---\n\n*Review this user's appeal when they respond via modmail. Approve or deny within 1 hour if possible.*`,
+      await reddit.modMail.createConversation({
+        subredditName: subreddit.name,
+        subject: `Content removed — appeal available`,
+        body: removalReason,
+        to: username,
+        isAuthorHidden: true,
       });
+      console.log(`BotPrints API: Sent appeal modmail to u/${username}`);
     } catch (e) {
-      console.warn('BotPrints API: Could not send Tier 2 modmail:', e);
+      console.warn('BotPrints API: Could not send Tier 2 modmail to user:', e);
     }
 
     await appendAuditEntry({
@@ -315,7 +335,7 @@ api.post('/remove-appeal/:username', async (c) => {
       action: 'remove-appeal',
       username,
       performedBy: currentUser?.username || 'unknown',
-      details: `Tier 2: Removed ${removedCount} item(s). Appeal status set to pending. Future content filtered.`,
+      details: `Tier 2: Removed ${removedCount} item(s). Appeal status set to pending. Timeout: ${settings.appealTimeout}.`,
     });
 
     console.log(`BotPrints API: Tier 2 complete for u/${username} — ${removedCount} items removed, appeal pending`);
@@ -324,6 +344,112 @@ api.post('/remove-appeal/:username', async (c) => {
     console.error(`BotPrints API: Tier 2 error for u/${username}:`, err);
     return c.json({ status: 'error', message: String(err) });
   }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// APPEAL WORKFLOW ENGINE (DASHBOARD ACTIONS)
+// ═══════════════════════════════════════════════════════════════════════════
+
+api.get('/appeals/pending', async (c) => {
+  try {
+    const appeals = await getAllPendingAppeals();
+    return c.json({ status: 'ok', appeals });
+  } catch (err) {
+    return c.json({ status: 'error', message: String(err) });
+  }
+});
+
+api.post('/appeals/:username/approve', async (c) => {
+  const username = c.req.param('username');
+  try {
+    const currentUser = await reddit.getCurrentUser();
+    
+    // Set status to approved (which also removes from pending queue)
+    await setAppealStatus(username, {
+      status: 'approved',
+      removalReason: 'Approved by moderator',
+      createdAt: Date.now(),
+    });
+    
+    await appendAuditEntry({
+      timestamp: Date.now(),
+      action: 'dismiss',
+      username,
+      performedBy: currentUser?.username || 'unknown',
+      details: `Appeal approved. Restored to normal monitoring.`,
+    });
+    
+    return c.json({ status: 'ok' });
+  } catch (err) {
+    return c.json({ status: 'error', message: String(err) });
+  }
+});
+
+api.post('/appeals/:username/extend', async (c) => {
+  const username = c.req.param('username');
+  try {
+    const currentUser = await reddit.getCurrentUser();
+    const appeal = await getAppealStatus(username);
+    if (!appeal || appeal.status !== 'pending') {
+      return c.json({ status: 'error', message: 'No pending appeal found.' });
+    }
+    
+    const newExpiresAt = (appeal.expiresAt || Date.now()) + 24 * 60 * 60 * 1000;
+    await setAppealStatus(username, {
+      ...appeal,
+      expiresAt: newExpiresAt,
+    });
+    
+    await appendAuditEntry({
+      timestamp: Date.now(),
+      action: 'watch',
+      username,
+      performedBy: currentUser?.username || 'unknown',
+      details: `Appeal timer extended by 24h.`,
+    });
+    
+    return c.json({ status: 'ok', expiresAt: newExpiresAt });
+  } catch (err) {
+    return c.json({ status: 'error', message: String(err) });
+  }
+});
+
+api.post('/appeals/:username/escalate', async (c) => {
+  const username = c.req.param('username');
+  try {
+    const currentUser = await reddit.getCurrentUser();
+    const subreddit = await reddit.getCurrentSubreddit();
+    
+    // Ban the user
+    try {
+      await reddit.bannedUsers.add({
+        subredditName: subreddit.name,
+        username,
+        reason: 'Failed appeal / Escalate from BotPrints',
+      });
+    } catch (e) {
+      console.warn(`BotPrints API: Failed to ban u/${username}:`, e);
+    }
+    
+    await setAppealStatus(username, {
+      status: 'denied',
+      removalReason: 'Escalated to ban',
+      createdAt: Date.now(),
+    });
+
+    await appendAuditEntry({
+      timestamp: Date.now(),
+      action: 'ban-report',
+      username,
+      performedBy: currentUser?.username || 'unknown',
+      details: `Appeal manually escalated. User banned.`,
+    });
+
+    return c.json({ status: 'ok' });
+  } catch (err) {
+    return c.json({ status: 'error', message: String(err) });
+  }
+
 });
 
 // ─── Tier 3: Ban + Report (score 90+) ───────────────────────────────────────

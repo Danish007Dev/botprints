@@ -9,6 +9,7 @@ import type {
   OnPostUpdateRequest,
   OnCommentCreateRequest,
   OnCommentUpdateRequest,
+  OnModMailRequest,
   TriggerResponse,
 } from '@devvit/web/shared';
 import { reddit } from '@devvit/web/server';
@@ -20,6 +21,8 @@ import {
   isUserFiltered,
   getCachedRiskScore,
   getCommunityBaseline,
+  getScoreHistory,
+  getAppealStatus,
   // Raid detection
   recordRaidActivity,
   checkRaidCondition,
@@ -29,6 +32,7 @@ import {
   getRaidSettings,
 } from '../storage/index.js';
 import { computeRiskScore } from '../scoring/riskScore.js';
+import { detectBehavioralShift } from '../scoring/shiftDetector.js';
 import type { RaidParticipant } from '../types/index.js';
 
 export const triggers = new Hono();
@@ -37,6 +41,55 @@ export const triggers = new Hono();
 triggers.post('/on-app-install', async (c) => {
   const input = await c.req.json<OnAppInstallRequest>();
   console.log('BotPrints installed to subreddit: r/' + input.subreddit?.name);
+  return c.json<TriggerResponse>({ status: 'success' }, 200);
+});
+
+// ─── onModMail ──────────────────────────────────────────────────────────────
+triggers.post('/on-mod-mail', async (c) => {
+  try {
+    const input = await c.req.json<OnModMailRequest>();
+    const username = input.messageAuthor?.name;
+    if (!username) return c.json<TriggerResponse>({ status: 'success' }, 200);
+    if (input.messageAuthorType !== 'participant_user') return c.json<TriggerResponse>({ status: 'success' }, 200);
+    
+    const appeal = await getAppealStatus(username);
+    if (!appeal || appeal.status !== 'pending') return c.json<TriggerResponse>({ status: 'success' }, 200);
+    
+    const subredditName = input.conversationSubreddit?.name;
+    if (!subredditName) return c.json<TriggerResponse>({ status: 'success' }, 200);
+
+    const profile = await getUserProfile(username);
+    const history = await getScoreHistory(username);
+    const baseline = await getCommunityBaseline();
+    const breakdown = computeRiskScore(profile, baseline);
+    const shift = detectBehavioralShift(history);
+    
+    let annotation = `🚨 **BotPrints Appeal Annotation** 🚨\n\n`;
+    annotation += `u/${username} is currently in **Pending Appeal** state.\n\n`;
+    annotation += `**Risk Score**: ${breakdown.total}/100\n`;
+    if (shift?.shifted) {
+      annotation += `**Behavior Shift**: ⚠️ Magnitude ${shift.magnitude}x\n`;
+    }
+    annotation += `**Signals**: Time (${breakdown.temporal}), Day (${breakdown.circadian}), Act (${breakdown.engagement})\n\n`;
+    annotation += `Review this user's appeal in the BotPrints Dashboard, or reply to them here.`;
+    
+    await reddit.modMail.reply({
+      conversationId: input.conversationId,
+      body: annotation,
+      isInternal: true,
+    });
+    
+    // Highlight the conversation for moderators to see clearly
+    try {
+      await reddit.modMail.highlightConversation(input.conversationId);
+    } catch (e) {
+      console.warn('BotPrints: Could not highlight modmail conversation:', e);
+    }
+
+    console.log(`BotPrints: Annotated modmail from pending appeal user u/${username}`);
+  } catch (err) {
+    console.error('BotPrints: /on-mod-mail error:', err);
+  }
   return c.json<TriggerResponse>({ status: 'success' }, 200);
 });
 

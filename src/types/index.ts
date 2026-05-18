@@ -108,6 +108,7 @@ export interface AppealStatus {
   status: 'pending' | 'approved' | 'denied';
   createdAt: number;
   removalReason: string;
+  expiresAt?: number;
   reviewedBy?: string;
   reviewedAt?: number;
 }

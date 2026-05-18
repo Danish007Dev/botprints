@@ -53,6 +53,7 @@
     <!-- Primary Navigation Tabs -->
     <nav class="nav-tabs" id="nav-tabs">
       <button class="nav-tab active" data-view="dashboard">📊 Dashboard</button>
+      <button class="nav-tab" data-view="appeals">⚖️ Appeals <span class="nav-badge" id="appeals-badge" style="display:none">0</span></button>
       <button class="nav-tab" data-view="settings">⚙️ Settings</button>
       <button class="nav-tab" data-view="audit">📋 Audit Log</button>
     </nav>
@@ -66,6 +67,7 @@
         <button class="filter-tab" data-filter="shifted">⚡ Shifted</button>
         <button class="filter-tab" data-filter="ring">🔗 Bot Ring</button>
         <button class="filter-tab" data-filter="safe">✓ Safe</button>
+        <button class="filter-tab" data-filter="appeals">⏳ Awaiting Appeal</button>
       </nav>
       <main class="grid" id="user-grid"></main>
     </div>
@@ -215,6 +217,19 @@
         </div>
         <div class="audit-entries" id="audit-entries">
           <div class="audit-empty">Loading audit log...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Appeals View -->
+    <div id="view-appeals" style="display:none">
+      <div class="audit-panel">
+        <div class="audit-header">
+          <h2>⚖️ Pending Appeals</h2>
+          <p class="audit-desc">Users who were actioned by Tier 2 (Remove + Appeal) and are currently in the appeal window.</p>
+        </div>
+        <div class="audit-entries" id="appeals-entries">
+          <div class="audit-empty">Loading appeals...</div>
         </div>
       </div>
     </div>

@@ -19,7 +19,8 @@
     "onPostCreate": "/internal/triggers/on-post-create",
     "onPostUpdate": "/internal/triggers/on-post-update",
     "onCommentCreate": "/internal/triggers/on-comment-create",
-    "onCommentUpdate": "/internal/triggers/on-comment-update"
+    "onCommentUpdate": "/internal/triggers/on-comment-update",
+    "onModMail": "/internal/triggers/on-mod-mail"
   },
   "scheduler": {
     "tasks": {

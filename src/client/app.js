@@ -8,6 +8,7 @@
   var allUsers = [];
   var allClearedUsers = [];
   var coordGroups = [];
+  var allAppeals = [];
   var isDemoLoaded = false;
 
   // Ultra-safe DOM helpers
@@ -145,6 +146,15 @@
         renderRingAlerts(coordGroups);
       }
       renderUsers();
+
+      // Fetch pending appeals
+      fetch('/api/appeals/pending')
+        .then(function(res) { return res.json(); })
+        .then(function(aData) {
+          allAppeals = (aData && aData.appeals) || [];
+          if (currentFilter === 'appeals') renderUsers();
+        })
+        .catch(function(e) { console.error('Appeals error:', e); });
 
       // Poll raid status independently
       fetchRaidStatus();
@@ -289,6 +299,15 @@
     if (!grid) return;
     grid.innerHTML = '';
 
+    if (currentFilter === 'appeals') {
+      if (!allAppeals.length) { showEl('empty-state'); return; }
+      hideEl('empty-state');
+      for (var i = 0; i < allAppeals.length; i++) {
+        grid.appendChild(createAppealCard(allAppeals[i]));
+      }
+      return;
+    }
+
     var filtered = allUsers;
     if (currentFilter === 'high') {
       filtered = allUsers.filter(function(u) { return u.score >= 70; });
@@ -307,6 +326,55 @@
     for (var i = 0; i < filtered.length; i++) {
       grid.appendChild(createUserCard(filtered[i]));
     }
+  }
+
+  function createAppealCard(appeal) {
+    var card = document.createElement('div');
+    card.className = 'user-card risk-high'; // Red border for attention
+    var countdown = appeal.expiresAt ? Math.max(0, Math.round((appeal.expiresAt - Date.now()) / 3600000)) + 'h remaining' : 'No timeout';
+    
+    card.innerHTML = 
+      '<div class="card-header">' +
+        '<div>' +
+          '<h3 class="card-title">u/' + appeal.username + '</h3>' +
+          '<div class="card-subtitle" style="color:#ffa502">Pending Appeal · ' + countdown + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="card-body">' +
+        '<div class="stat-row"><strong>Sent Reason:</strong> ' + (appeal.removalReason || '') + '</div>' +
+        '<div class="card-actions" style="margin-top: 15px;">' +
+          '<button class="btn action-safe btn-approve">✓ Approve</button>' +
+          '<button class="btn action-remove btn-escalate">Escalate (Ban)</button>' +
+          '<button class="btn action-filter btn-extend">Extend 24h</button>' +
+        '</div>' +
+      '</div>';
+
+    var btnApprove = card.querySelector('.btn-approve');
+    if (btnApprove) btnApprove.addEventListener('click', function() {
+      btnApprove.disabled = true;
+      fetch('/api/appeals/' + encodeURIComponent(appeal.username) + '/approve', { method: 'POST' })
+        .then(function() { showToast('Appeal approved.', 'success'); refreshDashboard(); })
+        .catch(function() { showToast('Error approving.', 'error'); btnApprove.disabled = false; });
+    });
+
+    var btnEscalate = card.querySelector('.btn-escalate');
+    if (btnEscalate) btnEscalate.addEventListener('click', function() {
+      if (!confirm('This will permanently ban u/' + appeal.username + '. Continue?')) return;
+      btnEscalate.disabled = true;
+      fetch('/api/appeals/' + encodeURIComponent(appeal.username) + '/escalate', { method: 'POST' })
+        .then(function() { showToast('Escalated to ban.', 'success'); refreshDashboard(); })
+        .catch(function() { showToast('Error escalating.', 'error'); btnEscalate.disabled = false; });
+    });
+
+    var btnExtend = card.querySelector('.btn-extend');
+    if (btnExtend) btnExtend.addEventListener('click', function() {
+      btnExtend.disabled = true;
+      fetch('/api/appeals/' + encodeURIComponent(appeal.username) + '/extend', { method: 'POST' })
+        .then(function() { showToast('Timer extended by 24h.', 'success'); refreshDashboard(); })
+        .catch(function() { showToast('Error extending.', 'error'); btnExtend.disabled = false; });
+    });
+
+    return card;
   }
 
   function riskClass(s) { return s >= 70 ? 'high' : s >= 40 ? 'medium' : 'low'; }
@@ -588,7 +656,7 @@
   // ─── View Switching ────────────────────────────────────────────────────────
   function switchView(view) {
     currentView = view;
-    var views = ['dashboard', 'settings', 'audit'];
+    var views = ['dashboard', 'settings', 'audit', 'appeals'];
     for (var i = 0; i < views.length; i++) {
       var el = getEl('view-' + views[i]);
       if (el) el.style.display = views[i] === view ? '' : 'none';
@@ -601,6 +669,7 @@
     // Load data for the target view
     if (view === 'settings') loadSettings();
     if (view === 'audit') loadAuditLog();
+    if (view === 'appeals') loadAppeals();
   }
 
   // ─── Settings Panel ────────────────────────────────────────────────────────
@@ -860,4 +929,108 @@
   } else {
     init();
   }
+  // ─── Appeals Workflow Engine ───────────────────────────────────────────────
+
+  function loadAppeals() {
+    var container = getEl('appeals-entries');
+    if (!container) return;
+    
+    container.innerHTML = '<div class="audit-empty">Loading pending appeals...</div>';
+    
+    fetch('/api/appeals/pending')
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        if (!data.appeals || data.appeals.length === 0) {
+          container.innerHTML = '<div class="audit-empty">No pending appeals. Everything is quiet.</div>';
+          updateAppealsBadge(0);
+          return;
+        }
+        updateAppealsBadge(data.appeals.length);
+        renderAppeals(data.appeals, container);
+      })
+      .catch(function(err) {
+        container.innerHTML = '<div class="audit-empty" style="color:var(--accent-red)">Error loading appeals.</div>';
+      });
+  }
+
+  function renderAppeals(appeals, container) {
+    container.innerHTML = '';
+    for (var i = 0; i < appeals.length; i++) {
+      var a = appeals[i];
+      var div = document.createElement('div');
+      div.className = 'appeal-item';
+      
+      var now = Date.now();
+      var isExpired = a.expiresAt && now > a.expiresAt;
+      var timerText = 'No Timeout (Manual Review Only)';
+      if (a.expiresAt) {
+        var diffHours = Math.max(0, Math.floor((a.expiresAt - now) / (1000 * 60 * 60)));
+        timerText = isExpired ? 'Timer Expired' : diffHours + ' hours remaining';
+      }
+
+      div.innerHTML = 
+        '<div class="appeal-info">' +
+          '<div class="appeal-user">u/' + escapeHTML(a.username) + '</div>' +
+          '<div class="appeal-timer ' + (isExpired ? 'expired' : '') + '">' + timerText + '</div>' +
+          '<div class="appeal-reason">' + escapeHTML(a.removalReason || '') + '</div>' +
+        '</div>' +
+        '<div class="appeal-actions">' +
+          '<button class="btn btn-approve" data-user="' + escapeHTML(a.username) + '">Approve</button>' +
+          '<button class="btn btn-extend" data-user="' + escapeHTML(a.username) + '">Extend Timer</button>' +
+          '<button class="btn btn-escalate" data-user="' + escapeHTML(a.username) + '">Escalate (Ban)</button>' +
+        '</div>';
+        
+      container.appendChild(div);
+    }
+    
+    // Bind buttons
+    var approveBtns = container.querySelectorAll('.btn-approve');
+    var extendBtns = container.querySelectorAll('.btn-extend');
+    var escalateBtns = container.querySelectorAll('.btn-escalate');
+    
+    for (var j = 0; j < approveBtns.length; j++) {
+      approveBtns[j].addEventListener('click', function(e) {
+        var user = e.target.getAttribute('data-user');
+        e.target.disabled = true;
+        e.target.textContent = 'Approving...';
+        fetch('/api/appeals/' + user + '/approve', { method: 'POST' })
+          .then(function() { loadAppeals(); fetchDashboard(); });
+      });
+    }
+    for (var k = 0; k < extendBtns.length; k++) {
+      extendBtns[k].addEventListener('click', function(e) {
+        var user = e.target.getAttribute('data-user');
+        e.target.disabled = true;
+        e.target.textContent = 'Extending...';
+        fetch('/api/appeals/' + user + '/extend', { method: 'POST' })
+          .then(function() { loadAppeals(); });
+      });
+    }
+    for (var l = 0; l < escalateBtns.length; l++) {
+      escalateBtns[l].addEventListener('click', function(e) {
+        if (!confirm('Escalate appeal for u/' + e.target.getAttribute('data-user') + '? This will ban the user.')) return;
+        var user = e.target.getAttribute('data-user');
+        e.target.disabled = true;
+        e.target.textContent = 'Escalating...';
+        fetch('/api/appeals/' + user + '/escalate', { method: 'POST' })
+          .then(function() { loadAppeals(); fetchDashboard(); });
+      });
+    }
+  }
+
+  function updateAppealsBadge(count) {
+    var badge = getEl('appeals-badge');
+    if (badge) {
+      badge.textContent = count;
+      badge.style.display = count > 0 ? 'inline-block' : 'none';
+    }
+  }
+
+  // Poll for pending appeals count initially
+  fetch('/api/appeals/pending')
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      if (data.appeals) updateAppealsBadge(data.appeals.length);
+    }).catch(function(){});
+
 })();

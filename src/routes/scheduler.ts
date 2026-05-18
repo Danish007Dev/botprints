@@ -9,6 +9,7 @@
 
 import { Hono } from 'hono';
 import type { TaskRequest, TaskResponse } from '@devvit/web/server';
+import { reddit } from '@devvit/web/server';
 import {
   getUserProfile,
   getAllUsernames,
@@ -18,6 +19,10 @@ import {
   getCommunityBaseline,
   saveCommunityBaseline,
   isUserDismissed,
+  getAllPendingAppeals,
+  getAutoActionSettings,
+  setAppealStatus,
+  appendAuditEntry,
 } from '../storage/index.js';
 import { computeRiskScore } from '../scoring/riskScore.js';
 import {
@@ -99,6 +104,9 @@ export async function runDailyAnalysis(): Promise<void> {
   // Recompute community baseline from all profiles
   await recomputeCommunityBaseline(usernames);
 
+  // Process Appeal Expirations
+  await processAppealsExpirations();
+
   const elapsed = Date.now() - startTime;
   console.log(
     `BotPrints daily analysis: ${analyzed}/${usernames.length} users in ${elapsed}ms. Top risk: u/${topUser} (${topScore})`
@@ -160,4 +168,71 @@ async function recomputeCommunityBaseline(
   };
 
   await saveCommunityBaseline(newBaseline);
+}
+
+// Helper: Process pending appeals that have expired
+async function processAppealsExpirations(): Promise<void> {
+  try {
+    const appeals = await getAllPendingAppeals();
+    if (appeals.length === 0) return;
+    
+    const settings = await getAutoActionSettings();
+    const now = Date.now();
+    
+    for (const appeal of appeals) {
+      if (appeal.expiresAt && now > appeal.expiresAt) {
+        if (settings.autoEscalate) {
+          // Auto-escalate to Ban
+          try {
+            const subreddit = await reddit.getCurrentSubreddit();
+            await subreddit.banUser({
+              username: appeal.username,
+              reason: 'BotPrints Auto-Action Escalation (Tier 3)',
+              note: 'Escalated from pending appeal timeout',
+            });
+            
+            await setAppealStatus(appeal.username, {
+              status: 'denied',
+              removalReason: 'Auto-escalated to Ban (Timeout)',
+              createdAt: Date.now(),
+            });
+
+            await appendAuditEntry({
+              timestamp: Date.now(),
+              action: 'ban-report',
+              username: appeal.username,
+              performedBy: 'BotPrints (Auto)',
+              details: `Appeal timeout expired. Auto-escalation enabled: User permanently banned.`,
+            });
+            console.log(`BotPrints: Auto-escalated u/${appeal.username} (Appeal Timeout)`);
+          } catch (e) {
+            console.warn(`BotPrints: Could not auto-ban u/${appeal.username}:`, e);
+          }
+        } else {
+          // Auto-escalate disabled. Send modmail reminder.
+          try {
+            const subreddit = await reddit.getCurrentSubreddit();
+            await reddit.modMail.createModInboxConversation({
+              subredditId: subreddit.id as any,
+              subject: `BotPrints Alert: Appeal Timeout for u/${appeal.username}`,
+              bodyMarkdown: `**Appeal Timeout Expired**\n\nu/${appeal.username} has not responded to their Tier 2 appeal within the configured ${settings.appealTimeout} window.\n\n*Auto-escalation is currently DISABLED in your settings.*\n\nPlease review this user in the BotPrints Dashboard and take manual action.`,
+            });
+            
+            // We do NOT clear the appeal status here so mods can still action it in the dashboard,
+            // but we might extend the timer so it doesn't spam every day? Let's just bump the timer 24h.
+            await setAppealStatus(appeal.username, {
+              ...appeal,
+              expiresAt: now + 24 * 60 * 60 * 1000,
+            });
+            
+            console.log(`BotPrints: Sent modmail reminder for expired appeal (u/${appeal.username})`);
+          } catch (e) {
+            console.warn(`BotPrints: Could not send appeal reminder modmail:`, e);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('BotPrints: Error processing appeal expirations:', err);
+  }
 }
