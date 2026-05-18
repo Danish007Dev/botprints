@@ -112,12 +112,58 @@ export interface AppealStatus {
   reviewedAt?: number;
 }
 
-export interface AppSettings {
-  minPostsForScoring: number; // default 5
-  riskThreshold: number; // default 70 — alert threshold
-  enableShiftDetection: boolean; // default true
-  demoMode: boolean; // default false
+export type TierAction = 'nothing' | 'modqueue' | 'remove-appeal' | 'ban-report';
+export type AppealTimeout = '24h' | '48h' | '72h' | 'never';
+
+export interface AutoActionSettings {
+  // ── Score Thresholds ──
+  lowRiskCutoff: number;        // default 60 (range 30-80)
+  mediumRiskCutoff: number;     // default 80 (range 50-95)
+  highRiskCutoff: number;       // default 90 (range 70-100)
+
+  // ── Per-Tier Auto-Actions ──
+  lowRiskAction: TierAction;    // default 'nothing'
+  mediumRiskAction: TierAction; // default 'nothing'
+  highRiskAction: TierAction;   // default 'nothing'
+
+  // ── Appeal Settings ──
+  appealMessage: string;        // template with {username}, {subreddit}
+  appealTimeout: AppealTimeout; // default 'never'
+  autoEscalate: boolean;        // auto-escalate on timeout, default false
+
+  // ── New Account Amplifier ──
+  newAccountAmplifier: boolean; // default false
+  newAccountThresholdDays: number; // default 30
+  newAccountMultiplier: number; // default 1.3
+
+  // ── Raid Alerts ──
+  raidAlertsEnabled: boolean;   // default true
+
+  // ── Daily Analysis ──
+  dailyAnalysisHour: number;    // 0-23 UTC, default 0
+
+  // ── Shared Threat Layer ──
+  sharedThreatLayer: boolean;   // default false (opt-in)
 }
+
+export const DEFAULT_AUTO_ACTION_SETTINGS: AutoActionSettings = {
+  lowRiskCutoff: 60,
+  mediumRiskCutoff: 80,
+  highRiskCutoff: 90,
+  lowRiskAction: 'nothing',
+  mediumRiskAction: 'nothing',
+  highRiskAction: 'nothing',
+  appealMessage:
+    'We\u2019ve detected unusual activity on your account. If you believe this is a mistake, please reply to this message with a brief explanation of your recent activity in r/{subreddit}. Your appeal will be reviewed by a moderator.',
+  appealTimeout: 'never',
+  autoEscalate: false,
+  newAccountAmplifier: false,
+  newAccountThresholdDays: 30,
+  newAccountMultiplier: 1.3,
+  raidAlertsEnabled: true,
+  dailyAnalysisHour: 0,
+  sharedThreatLayer: false,
+};
 
 // ─── Raid Detection ─────────────────────────────────────────────────────────
 

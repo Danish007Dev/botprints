@@ -50,16 +50,174 @@
     <!-- Coordinated Ring Alert -->
     <section class="ring-alert" id="ring-alert" style="display:none"></section>
 
-    <!-- Filters -->
-    <nav class="filters">
-      <button class="filter-tab active" data-filter="all">All</button>
-      <button class="filter-tab" data-filter="high">🔴 High Risk</button>
-      <button class="filter-tab" data-filter="shifted">⚡ Shifted</button>
-      <button class="filter-tab" data-filter="ring">🔗 Bot Ring</button>
-      <button class="filter-tab" data-filter="safe">✓ Safe</button>
+    <!-- Primary Navigation Tabs -->
+    <nav class="nav-tabs" id="nav-tabs">
+      <button class="nav-tab active" data-view="dashboard">📊 Dashboard</button>
+      <button class="nav-tab" data-view="settings">⚙️ Settings</button>
+      <button class="nav-tab" data-view="audit">📋 Audit Log</button>
     </nav>
 
-    <main class="grid" id="user-grid"></main>
+    <!-- Dashboard View -->
+    <div id="view-dashboard">
+      <!-- Filters -->
+      <nav class="filters">
+        <button class="filter-tab active" data-filter="all">All</button>
+        <button class="filter-tab" data-filter="high">🔴 High Risk</button>
+        <button class="filter-tab" data-filter="shifted">⚡ Shifted</button>
+        <button class="filter-tab" data-filter="ring">🔗 Bot Ring</button>
+        <button class="filter-tab" data-filter="safe">✓ Safe</button>
+      </nav>
+      <main class="grid" id="user-grid"></main>
+    </div>
+
+    <!-- Settings View -->
+    <div id="view-settings" style="display:none">
+      <div class="settings-panel">
+        <div class="settings-header">
+          <h2>⚙️ Auto-Action Configuration</h2>
+          <p class="settings-desc">Configure how BotPrints automatically handles suspicious accounts. All actions default to "Do Nothing" — the tool is never aggressive out of the box.</p>
+        </div>
+
+        <!-- Score Thresholds -->
+        <div class="settings-section">
+          <h3>Score Thresholds</h3>
+          <div class="setting-row">
+            <label>Low Risk Cutoff <span class="setting-val" id="val-low">60</span></label>
+            <input type="range" id="set-low" min="30" max="80" value="60" class="slider">
+          </div>
+          <div class="setting-row">
+            <label>Medium Risk Cutoff <span class="setting-val" id="val-med">80</span></label>
+            <input type="range" id="set-med" min="50" max="95" value="80" class="slider">
+          </div>
+          <div class="setting-row">
+            <label>High Risk Cutoff <span class="setting-val" id="val-high">90</span></label>
+            <input type="range" id="set-high" min="70" max="100" value="90" class="slider">
+          </div>
+        </div>
+
+        <!-- Per-Tier Actions -->
+        <div class="settings-section">
+          <h3>Auto-Actions Per Tier</h3>
+          <div class="setting-row">
+            <label>Low Risk Action (score ≥ <span class="dynamic-low">60</span>)</label>
+            <select id="set-low-action" class="setting-select">
+              <option value="nothing">Do Nothing</option>
+              <option value="modqueue">Send to Modqueue</option>
+              <option value="remove-appeal">Remove + Appeal</option>
+              <option value="ban-report">Ban + Report</option>
+            </select>
+          </div>
+          <div class="setting-row">
+            <label>Medium Risk Action (score ≥ <span class="dynamic-med">80</span>)</label>
+            <select id="set-med-action" class="setting-select">
+              <option value="nothing">Do Nothing</option>
+              <option value="modqueue">Send to Modqueue</option>
+              <option value="remove-appeal">Remove + Appeal</option>
+              <option value="ban-report">Ban + Report</option>
+            </select>
+          </div>
+          <div class="setting-row">
+            <label>High Risk Action (score ≥ <span class="dynamic-high">90</span>)</label>
+            <select id="set-high-action" class="setting-select">
+              <option value="nothing">Do Nothing</option>
+              <option value="modqueue">Send to Modqueue</option>
+              <option value="remove-appeal">Remove + Appeal</option>
+              <option value="ban-report">Ban + Report</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Appeal Settings -->
+        <div class="settings-section">
+          <h3>Appeal Configuration</h3>
+          <div class="setting-row">
+            <label>Appeal Removal Message</label>
+            <textarea id="set-appeal-msg" class="setting-textarea" rows="4" placeholder="Message sent to users when their content is removed..."></textarea>
+            <div class="setting-hint">Supports variables: {username}, {subreddit}</div>
+          </div>
+          <div class="setting-row">
+            <label>Appeal Timeout</label>
+            <select id="set-appeal-timeout" class="setting-select">
+              <option value="never">Never (manual review only)</option>
+              <option value="24h">24 hours</option>
+              <option value="48h">48 hours</option>
+              <option value="72h">72 hours</option>
+            </select>
+          </div>
+          <div class="setting-row toggle-row">
+            <label>Auto-Escalate on Timeout</label>
+            <div class="toggle-wrap">
+              <input type="checkbox" id="set-auto-escalate" class="toggle-input">
+              <label for="set-auto-escalate" class="toggle-label"></label>
+            </div>
+            <div class="setting-hint">When enabled, unanswered appeals automatically escalate to the next tier's action.</div>
+          </div>
+        </div>
+
+        <!-- New Account Amplifier -->
+        <div class="settings-section">
+          <h3>New Account Amplifier</h3>
+          <div class="setting-row toggle-row">
+            <label>Enable Amplifier</label>
+            <div class="toggle-wrap">
+              <input type="checkbox" id="set-new-acct" class="toggle-input">
+              <label for="set-new-acct" class="toggle-label"></label>
+            </div>
+            <div class="setting-hint">Accounts under the threshold age get their risk score multiplied before threshold comparison.</div>
+          </div>
+          <div class="setting-row">
+            <label>Account Age Threshold (days) <span class="setting-val" id="val-acct-days">30</span></label>
+            <input type="range" id="set-acct-days" min="7" max="90" value="30" class="slider">
+          </div>
+          <div class="setting-row">
+            <label>Score Multiplier <span class="setting-val" id="val-acct-mult">1.3</span>x</label>
+            <input type="range" id="set-acct-mult" min="110" max="200" value="130" class="slider">
+          </div>
+        </div>
+
+        <!-- Scheduling & Integrations -->
+        <div class="settings-section">
+          <h3>Scheduling & Integrations</h3>
+          <div class="setting-row">
+            <label>Daily Analysis Hour (UTC) <span class="setting-val" id="val-hour">0</span>:00</label>
+            <input type="range" id="set-hour" min="0" max="23" value="0" class="slider">
+          </div>
+          <div class="setting-row toggle-row">
+            <label>Raid Alerts Enabled</label>
+            <div class="toggle-wrap">
+              <input type="checkbox" id="set-raid-alerts" class="toggle-input" checked>
+              <label for="set-raid-alerts" class="toggle-label"></label>
+            </div>
+          </div>
+          <div class="setting-row toggle-row">
+            <label>Shared Threat Layer (opt-in)</label>
+            <div class="toggle-wrap">
+              <input type="checkbox" id="set-shared-threat" class="toggle-input">
+              <label for="set-shared-threat" class="toggle-label"></label>
+            </div>
+            <div class="setting-hint">Share confirmed bot ring fingerprints across participating subreddits.</div>
+          </div>
+        </div>
+
+        <div class="settings-actions">
+          <button class="btn btn-save" id="btn-save-settings">💾 Save Settings</button>
+          <span class="save-status" id="save-status"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Audit Log View -->
+    <div id="view-audit" style="display:none">
+      <div class="audit-panel">
+        <div class="audit-header">
+          <h2>📋 Audit Trail</h2>
+          <p class="audit-desc">Every automated and manual action logged by BotPrints. This is your complete transparency record.</p>
+        </div>
+        <div class="audit-entries" id="audit-entries">
+          <div class="audit-empty">Loading audit log...</div>
+        </div>
+      </div>
+    </div>
 
     <div class="empty-state" id="empty-state" style="display:none">
       <div class="empty-icon">🔍</div>

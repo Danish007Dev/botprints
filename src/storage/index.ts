@@ -47,3 +47,9 @@ export {
   getRaidState,
   clearRaidState,
 } from './raid.js';
+
+// Auto-Action Settings
+export {
+  getAutoActionSettings,
+  saveAutoActionSettings,
+} from './settings.js';

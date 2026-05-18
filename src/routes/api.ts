@@ -26,13 +26,18 @@ import {
   clearRaidState,
   getRaidSettings,
   saveRaidSettings,
+  // Auto-Action Settings
+  getAutoActionSettings,
+  saveAutoActionSettings,
+  // Audit
+  getAuditLog,
 } from '../storage/index.js';
 import { computeRiskScore } from '../scoring/riskScore.js';
 import { detectBehavioralShift } from '../scoring/shiftDetector.js';
 import { detectCoordinatedGroups } from '../scoring/coordinatedDetector.js';
 import { DEMO_PROFILES } from '../data/demoData.js';
 import { DEFAULT_BASELINE } from '../types/index.js';
-import type { ScoredUser, SubredditSummary, RaidSettings } from '../types/index.js';
+import type { ScoredUser, SubredditSummary, RaidSettings, AutoActionSettings } from '../types/index.js';
 
 export const api = new Hono();
 
@@ -502,5 +507,42 @@ api.post('/raid-clear', async (c) => {
     return c.json({ status: 'ok' });
   } catch (err) {
     return c.json({ status: 'error', message: String(err) });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUTO-ACTION SETTINGS API
+// ═══════════════════════════════════════════════════════════════════════════
+
+api.get('/settings', async (c) => {
+  try {
+    const settings = await getAutoActionSettings();
+    return c.json({ status: 'ok', settings });
+  } catch (err) {
+    return c.json({ status: 'error', message: String(err) });
+  }
+});
+
+api.put('/settings', async (c) => {
+  try {
+    const body = await c.req.json<Partial<AutoActionSettings>>();
+    const saved = await saveAutoActionSettings(body);
+    console.log('BotPrints API: Settings updated');
+    return c.json({ status: 'ok', settings: saved });
+  } catch (err) {
+    return c.json({ status: 'error', message: String(err) });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDIT LOG API
+// ═══════════════════════════════════════════════════════════════════════════
+
+api.get('/audit-log', async (c) => {
+  try {
+    const entries = await getAuditLog(100);
+    return c.json({ status: 'ok', entries });
+  } catch (err) {
+    return c.json({ status: 'error', entries: [] });
   }
 });

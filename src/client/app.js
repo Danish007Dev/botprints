@@ -4,6 +4,7 @@
   'use strict';
 
   var currentFilter = 'all';
+  var currentView = 'dashboard';
   var allUsers = [];
   var allClearedUsers = [];
   var coordGroups = [];
@@ -584,6 +585,216 @@
     return card;
   }
 
+  // ─── View Switching ────────────────────────────────────────────────────────
+  function switchView(view) {
+    currentView = view;
+    var views = ['dashboard', 'settings', 'audit'];
+    for (var i = 0; i < views.length; i++) {
+      var el = getEl('view-' + views[i]);
+      if (el) el.style.display = views[i] === view ? '' : 'none';
+    }
+    // Update nav tab active state
+    var tabs = document.querySelectorAll('.nav-tab');
+    for (var j = 0; j < tabs.length; j++) {
+      tabs[j].classList.toggle('active', tabs[j].getAttribute('data-view') === view);
+    }
+    // Load data for the target view
+    if (view === 'settings') loadSettings();
+    if (view === 'audit') loadAuditLog();
+  }
+
+  // ─── Settings Panel ────────────────────────────────────────────────────────
+
+  function loadSettings() {
+    fetch('/api/settings')
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        if (!data || !data.settings) return;
+        var s = data.settings;
+        setSlider('set-low', 'val-low', s.lowRiskCutoff);
+        setSlider('set-med', 'val-med', s.mediumRiskCutoff);
+        setSlider('set-high', 'val-high', s.highRiskCutoff);
+        setSelect('set-low-action', s.lowRiskAction);
+        setSelect('set-med-action', s.mediumRiskAction);
+        setSelect('set-high-action', s.highRiskAction);
+        setTextarea('set-appeal-msg', s.appealMessage);
+        setSelect('set-appeal-timeout', s.appealTimeout);
+        setCheckbox('set-auto-escalate', s.autoEscalate);
+        setCheckbox('set-new-acct', s.newAccountAmplifier);
+        setSlider('set-acct-days', 'val-acct-days', s.newAccountThresholdDays);
+        setSlider('set-acct-mult', 'val-acct-mult', Math.round(s.newAccountMultiplier * 100), function(v) { return (v / 100).toFixed(1); });
+        setSlider('set-hour', 'val-hour', s.dailyAnalysisHour);
+        setCheckbox('set-raid-alerts', s.raidAlertsEnabled);
+        setCheckbox('set-shared-threat', s.sharedThreatLayer);
+        // Update dynamic tier labels
+        updateDynamicLabels(s);
+      })
+      .catch(function(e) { console.error('Failed to load settings:', e); });
+  }
+
+  function saveSettings() {
+    var statusEl = getEl('save-status');
+    if (statusEl) { statusEl.textContent = 'Saving...'; statusEl.className = 'save-status'; }
+
+    var settings = {
+      lowRiskCutoff: getSliderVal('set-low'),
+      mediumRiskCutoff: getSliderVal('set-med'),
+      highRiskCutoff: getSliderVal('set-high'),
+      lowRiskAction: getSelectVal('set-low-action'),
+      mediumRiskAction: getSelectVal('set-med-action'),
+      highRiskAction: getSelectVal('set-high-action'),
+      appealMessage: getTextareaVal('set-appeal-msg'),
+      appealTimeout: getSelectVal('set-appeal-timeout'),
+      autoEscalate: getCheckboxVal('set-auto-escalate'),
+      newAccountAmplifier: getCheckboxVal('set-new-acct'),
+      newAccountThresholdDays: getSliderVal('set-acct-days'),
+      newAccountMultiplier: getSliderVal('set-acct-mult') / 100,
+      raidAlertsEnabled: getCheckboxVal('set-raid-alerts'),
+      dailyAnalysisHour: getSliderVal('set-hour'),
+      sharedThreatLayer: getCheckboxVal('set-shared-threat'),
+    };
+
+    fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settings),
+    })
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        if (data.status === 'ok') {
+          if (statusEl) { statusEl.textContent = '✓ Saved'; statusEl.className = 'save-status saved'; }
+          showToast('Settings saved successfully.', 'success');
+          // Update sliders to reflect server-clamped values
+          if (data.settings) {
+            setSlider('set-low', 'val-low', data.settings.lowRiskCutoff);
+            setSlider('set-med', 'val-med', data.settings.mediumRiskCutoff);
+            setSlider('set-high', 'val-high', data.settings.highRiskCutoff);
+            updateDynamicLabels(data.settings);
+          }
+        } else {
+          if (statusEl) { statusEl.textContent = '✗ Error'; statusEl.className = 'save-status error'; }
+          showToast('Failed to save: ' + (data.message || 'Unknown error'), 'error');
+        }
+      })
+      .catch(function() {
+        if (statusEl) { statusEl.textContent = '✗ Error'; statusEl.className = 'save-status error'; }
+        showToast('Network error saving settings.', 'error');
+      });
+  }
+
+  // Settings form helpers
+  function setSlider(sliderId, labelId, value, formatter) {
+    var el = getEl(sliderId);
+    if (el) el.value = value;
+    var lbl = getEl(labelId);
+    if (lbl) lbl.textContent = formatter ? formatter(value) : value;
+  }
+  function setSelect(id, value) {
+    var el = getEl(id);
+    if (el) el.value = value || '';
+  }
+  function setTextarea(id, value) {
+    var el = getEl(id);
+    if (el) el.value = value || '';
+  }
+  function setCheckbox(id, value) {
+    var el = getEl(id);
+    if (el) el.checked = !!value;
+  }
+  function getSliderVal(id) {
+    var el = getEl(id);
+    return el ? parseInt(el.value, 10) : 0;
+  }
+  function getSelectVal(id) {
+    var el = getEl(id);
+    return el ? el.value : '';
+  }
+  function getTextareaVal(id) {
+    var el = getEl(id);
+    return el ? el.value : '';
+  }
+  function getCheckboxVal(id) {
+    var el = getEl(id);
+    return el ? el.checked : false;
+  }
+  function updateDynamicLabels(s) {
+    var dynLow = document.querySelectorAll('.dynamic-low');
+    var dynMed = document.querySelectorAll('.dynamic-med');
+    var dynHigh = document.querySelectorAll('.dynamic-high');
+    for (var i = 0; i < dynLow.length; i++) dynLow[i].textContent = s.lowRiskCutoff;
+    for (var j = 0; j < dynMed.length; j++) dynMed[j].textContent = s.mediumRiskCutoff;
+    for (var k = 0; k < dynHigh.length; k++) dynHigh[k].textContent = s.highRiskCutoff;
+  }
+
+  function bindSliderLive(sliderId, labelId, formatter) {
+    var el = getEl(sliderId);
+    if (!el) return;
+    el.addEventListener('input', function() {
+      var lbl = getEl(labelId);
+      if (lbl) lbl.textContent = formatter ? formatter(el.value) : el.value;
+    });
+  }
+
+  // ─── Audit Log Tab ─────────────────────────────────────────────────────────
+
+  function loadAuditLog() {
+    var container = getEl('audit-entries');
+    if (!container) return;
+    container.innerHTML = '<div class="audit-empty">Loading...</div>';
+
+    fetch('/api/audit-log')
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        var entries = (data && data.entries) || [];
+        if (entries.length === 0) {
+          container.innerHTML = '<div class="audit-empty">No actions logged yet. Actions will appear here as BotPrints processes users.</div>';
+          return;
+        }
+        var html = '';
+        for (var i = 0; i < entries.length; i++) {
+          var e = entries[i];
+          var date = new Date(e.timestamp);
+          var timeStr = date.toLocaleString();
+          var actionClass = getAuditActionClass(e.action);
+          html += '<div class="audit-entry">' +
+            '<div class="audit-time">' + timeStr + '</div>' +
+            '<div class="audit-body">' +
+              '<span class="audit-action ' + actionClass + '">' + formatAction(e.action) + '</span>' +
+              '<span class="audit-user">u/' + (e.username || 'unknown') + '</span>' +
+              '<span class="audit-by">by ' + (e.performedBy || 'system') + '</span>' +
+            '</div>' +
+            '<div class="audit-detail">' + (e.details || '') + '</div>' +
+          '</div>';
+        }
+        container.innerHTML = html;
+      })
+      .catch(function() {
+        container.innerHTML = '<div class="audit-empty">Failed to load audit log.</div>';
+      });
+  }
+
+  function getAuditActionClass(action) {
+    var map = {
+      'watch': 'audit-watch',
+      'filter': 'audit-filter',
+      'remove-appeal': 'audit-remove',
+      'ban-report': 'audit-ban',
+      'dismiss': 'audit-dismiss',
+    };
+    return map[action] || 'audit-default';
+  }
+
+  function formatAction(action) {
+    var map = {
+      'watch': '👁️ Watch',
+      'filter': '🔽 Filter',
+      'remove-appeal': '🗑️ Remove + Appeal',
+      'ban-report': '🚫 Ban + Report',
+      'dismiss': '✓ Dismissed',
+    };
+    return map[action] || action;
+  }
+
   // ─── Init ──────────────────────────────────────────────────────────────────
   function init() {
     try {
@@ -601,6 +812,7 @@
       var closeHelpBtn = getEl('btn-close-help');
       if (closeHelpBtn) closeHelpBtn.addEventListener('click', function() { hideEl('help-modal'); });
 
+      // Filter tabs (dashboard sub-filters)
       var tabs = document.querySelectorAll('.filter-tab');
       for (var i = 0; i < tabs.length; i++) {
         (function(tab) {
@@ -613,6 +825,30 @@
           });
         })(tabs[i]);
       }
+
+      // Primary nav tabs (Dashboard / Settings / Audit)
+      var navTabs = document.querySelectorAll('.nav-tab');
+      for (var n = 0; n < navTabs.length; n++) {
+        (function(tab) {
+          tab.addEventListener('click', function() {
+            var view = tab.getAttribute('data-view') || 'dashboard';
+            switchView(view);
+          });
+        })(navTabs[n]);
+      }
+
+      // Settings: live slider value display
+      bindSliderLive('set-low', 'val-low');
+      bindSliderLive('set-med', 'val-med');
+      bindSliderLive('set-high', 'val-high');
+      bindSliderLive('set-acct-days', 'val-acct-days');
+      bindSliderLive('set-acct-mult', 'val-acct-mult', function(v) { return (v / 100).toFixed(1); });
+      bindSliderLive('set-hour', 'val-hour');
+
+      // Settings: save button
+      var saveBtn = getEl('btn-save-settings');
+      if (saveBtn) saveBtn.addEventListener('click', function() { saveSettings(); });
+
     } catch (e) {
       console.error('BotPrints init error:', e);
     }
