@@ -2,6 +2,13 @@
 // Single source of truth for all data structures used across the app.
 // This file is imported by storage, signals, scoring, triggers, and UI layers.
 
+export interface SharedThreat {
+  username: string;
+  originSubreddit: string;
+  detectedAt: number;
+  confidence: number;
+}
+
 export interface UserProfile {
   username: string;
   posts: number;
@@ -11,6 +18,7 @@ export interface UserProfile {
   hourBuckets: number[]; // always length 24
   firstSeen: number;
   lastUpdated: number;
+  sharedThreat?: SharedThreat;
 }
 
 export interface CommunityBaseline {

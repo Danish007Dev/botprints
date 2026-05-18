@@ -60,3 +60,9 @@ export {
   incrementMetric,
   getDashboardMetrics,
 } from './metrics.js';
+
+// Shared Threat Layer
+export {
+  pushSharedThreat,
+  checkSharedThreat,
+} from './threats.js';

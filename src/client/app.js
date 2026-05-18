@@ -533,6 +533,9 @@
     var uname = user.username || 'unknown';
 
     var badges = '';
+    if (profile.sharedThreat) {
+      badges += '<span class="badge badge-threat">🌐 Shared Intel: Detected in r/' + profile.sharedThreat.originSubreddit + '</span>';
+    }
     if (user.shift && user.shift.shifted) badges += '<span class="badge badge-shifted">⚡ Behavior Changed</span>';
     if (user.coordGroup) badges += '<span class="badge badge-ring">🔗 Coordinated Group</span>';
     if (!badges) badges = '<span class="badge badge-stable">✓ Normal Behavior</span>';

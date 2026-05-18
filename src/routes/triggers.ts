@@ -30,6 +30,7 @@ import {
   setRaidCooldown,
   setRaidState,
   getRaidSettings,
+  checkSharedThreat,
 } from '../storage/index.js';
 import { computeRiskScore } from '../scoring/riskScore.js';
 import { detectBehavioralShift } from '../scoring/shiftDetector.js';
@@ -292,6 +293,16 @@ triggers.post('/on-post-create', async (c) => {
     }
 
     const profile = await getUserProfile(username);
+    
+    // 🌐 Cross-subreddit threat intel check on first activity
+    if (profile.posts === 0 && profile.comments === 0 && !profile.sharedThreat) {
+      const threat = await checkSharedThreat(username);
+      if (threat && threat.originSubreddit !== input.subreddit?.name) {
+        profile.sharedThreat = threat;
+        console.log(`BotPrints: Shared Threat detected! u/${username} originated from r/${threat.originSubreddit}`);
+      }
+    }
+
     const createdAt = input.post?.createdAt;
     const hour = createdAt
       ? new Date(createdAt).getUTCHours()
@@ -347,6 +358,16 @@ triggers.post('/on-comment-create', async (c) => {
     }
 
     const profile = await getUserProfile(username);
+    
+    // 🌐 Cross-subreddit threat intel check on first activity
+    if (profile.posts === 0 && profile.comments === 0 && !profile.sharedThreat) {
+      const threat = await checkSharedThreat(username);
+      if (threat && threat.originSubreddit !== input.subreddit?.name) {
+        profile.sharedThreat = threat;
+        console.log(`BotPrints: Shared Threat detected! u/${username} originated from r/${threat.originSubreddit}`);
+      }
+    }
+
     profile.comments += 1;
 
     console.log(`BotPrints: onCommentCreate -> Registered comment for u/${username}. Total comments: ${profile.comments}`);

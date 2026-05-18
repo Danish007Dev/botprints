@@ -31,8 +31,11 @@ import {
   computePostCommentRatio,
   computeEditRate,
 } from '../signals/index.js';
+import { detectCoordinatedGroups } from '../scoring/coordinatedDetector.js';
+import { detectBehavioralShift } from '../scoring/shiftDetector.js';
 import { DEFAULT_BASELINE } from '../types/index.js';
-import type { CommunityBaseline } from '../types/index.js';
+import type { CommunityBaseline, ScoredUser } from '../types/index.js';
+import { pushSharedThreat } from '../storage/threats.js';
 
 export const scheduler = new Hono();
 
@@ -103,6 +106,35 @@ export async function runDailyAnalysis(): Promise<void> {
 
   // Recompute community baseline from all profiles
   await recomputeCommunityBaseline(usernames);
+
+  // Re-run coordinated group detection on top users
+  const topUsers = await getAllUsernames();
+  const scoredUsers: ScoredUser[] = [];
+  
+  // We need to score everyone to check for rings
+  for (const username of topUsers) {
+    try {
+      const profile = await getUserProfile(username);
+      const breakdown = computeRiskScore(profile, baseline, minPosts);
+      scoredUsers.push({ 
+        username, 
+        score: breakdown.total, 
+        breakdown, 
+        shift: { shifted: false, magnitude: 0, direction: 'stable', daysSinceNormal: 0 }, 
+        profile 
+      });
+    } catch { /* skip */ }
+  }
+
+  const coordGroups = detectCoordinatedGroups(scoredUsers);
+  const currentSubreddit = await reddit.getCurrentSubreddit();
+  
+  for (const group of coordGroups) {
+    if (group.members.length >= 3 && group.avgCorrelation > 0.9) {
+      await pushSharedThreat(currentSubreddit.name, group.members, group.avgCorrelation);
+      console.log(`BotPrints: Confirmed ring pushed to shared threat layer. Group ${group.id}`);
+    }
+  }
 
   // Process Appeal Expirations
   await processAppealsExpirations();
