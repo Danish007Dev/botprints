@@ -17,9 +17,10 @@ import {
   getClearedUsernames,
   addToWatchlist,
   isUserWatched,
-  // 3-Tier Enforcement
   addToFilterList,
   setAppealStatus,
+  getAppealStatus,
+  clearAppealStatus,
   appendAuditEntry,
   // Raid Detection
   getRaidState,
@@ -33,6 +34,8 @@ import {
   getAuditLog,
   // Appeals
   getAllPendingAppeals,
+  incrementMetric,
+  getDashboardMetrics,
 } from '../storage/index.js';
 import { computeRiskScore } from '../scoring/riskScore.js';
 import { detectBehavioralShift } from '../scoring/shiftDetector.js';
@@ -140,6 +143,13 @@ api.post('/load-demo', async (c) => {
     for (const profile of DEMO_PROFILES) {
       await saveUserProfile(profile.username, profile);
       await registerUser(profile.username);
+      
+      // Simulate some fake metrics
+      await incrementMetric('accounts_actioned', 2);
+      await incrementMetric('items_filtered', 5);
+      await incrementMetric('bans_issued', 1);
+      await incrementMetric('rings_detected', 1);
+      
       const breakdown = computeRiskScore(profile, baseline);
       await updateUserScore(profile.username, breakdown.total);
       const fakeHistory = Array.from({ length: 7 }, () =>
@@ -236,6 +246,9 @@ api.post('/filter/:username', async (c) => {
   try {
     const currentUser = await reddit.getCurrentUser();
     await addToFilterList(username);
+    
+    await incrementMetric('items_filtered', 1);
+    await incrementMetric('accounts_actioned', 1);
 
     await appendAuditEntry({
       timestamp: Date.now(),
@@ -309,12 +322,16 @@ api.post('/remove-appeal/:username', async (c) => {
     await addToFilterList(username);
 
     // Store appeal status
-    await setAppealStatus(username, {
+    const appealData: any = {
       status: 'pending',
       removalReason,
       createdAt: Date.now(),
-      expiresAt,
-    });
+    };
+    if (expiresAt !== undefined) {
+      appealData.expiresAt = expiresAt;
+    }
+    
+    await setAppealStatus(username, appealData);
 
     // Send modmail TO THE USER with appeal instructions
     try {
@@ -337,6 +354,10 @@ api.post('/remove-appeal/:username', async (c) => {
       performedBy: currentUser?.username || 'unknown',
       details: `Tier 2: Removed ${removedCount} item(s). Appeal status set to pending. Timeout: ${settings.appealTimeout}.`,
     });
+
+    await incrementMetric('items_filtered', removedCount);
+    await incrementMetric('appeals_sent', 1);
+    await incrementMetric('accounts_actioned', 1);
 
     console.log(`BotPrints API: Tier 2 complete for u/${username} — ${removedCount} items removed, appeal pending`);
     return c.json({ status: 'ok', removedCount });
@@ -378,6 +399,9 @@ api.post('/appeals/:username/approve', async (c) => {
       performedBy: currentUser?.username || 'unknown',
       details: `Appeal approved. Restored to normal monitoring.`,
     });
+    
+    // An approved appeal means they responded
+    await incrementMetric('appeals_responded', 1);
     
     return c.json({ status: 'ok' });
   } catch (err) {
@@ -422,10 +446,13 @@ api.post('/appeals/:username/escalate', async (c) => {
     
     // Ban the user
     try {
-      await reddit.bannedUsers.add({
+      await reddit.banUser({
         subredditName: subreddit.name,
         username,
+        duration: 0, // permanent
         reason: 'Failed appeal / Escalate from BotPrints',
+        note: `BotPrints automated ban — appeal manually escalated. Actioned by ${currentUser?.username || 'mod'}.`,
+        message: 'Your account has been permanently banned from this community following an unsuccessful appeal regarding detected automated or inauthentic behavior patterns.',
       });
     } catch (e) {
       console.warn(`BotPrints API: Failed to ban u/${username}:`, e);
@@ -444,6 +471,9 @@ api.post('/appeals/:username/escalate', async (c) => {
       performedBy: currentUser?.username || 'unknown',
       details: `Appeal manually escalated. User banned.`,
     });
+
+    await incrementMetric('bans_issued', 1);
+    await incrementMetric('appeals_responded', 1); // An escalated appeal likely implies a response was evaluated
 
     return c.json({ status: 'ok' });
   } catch (err) {
@@ -508,6 +538,10 @@ api.post('/ban-report/:username', async (c) => {
     } catch (e) {
       console.warn(`BotPrints API: Could not report comments for u/${username}:`, e);
     }
+    
+    await incrementMetric('bans_issued', 1);
+    await incrementMetric('items_filtered', reportedCount);
+    await incrementMetric('accounts_actioned', 1);
 
     // Notify mod team via modmail
     try {
@@ -566,6 +600,16 @@ api.get('/raid-status', async (c) => {
   }
 });
 
+// ─── Metrics ────────────────────────────────────────────────────────────────
+api.get('/metrics', async (c) => {
+  try {
+    const metrics = await getDashboardMetrics();
+    return c.json({ status: 'ok', metrics });
+  } catch (err) {
+    return c.json({ status: 'error', message: String(err) });
+  }
+});
+
 // ─── Raid Settings ──────────────────────────────────────────────────────────
 api.get('/raid-settings', async (c) => {
   try {
@@ -618,6 +662,8 @@ api.post('/raid-filter-all', async (c) => {
       performedBy: currentUser?.username || 'unknown',
       details: `Bulk Raid Filter: ${filteredCount} participant(s) added to filter list.`,
     });
+    
+    await incrementMetric('rings_detected', 1);
 
     console.log(`BotPrints API: Bulk raid filter applied — ${filteredCount} users filtered`);
     return c.json({ status: 'ok', filteredCount });

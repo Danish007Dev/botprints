@@ -61,6 +61,18 @@ body {
 .summary-card.accent .summary-value { color: var(--accent-purple); }
 .summary-card.health .summary-value { color: var(--accent-green); }
 
+/* Metrics Dashboard */
+.metrics-dashboard { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 14px; }
+.metrics-primary { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.metric-card { flex: 1; min-width: 200px; background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 16px; text-align: center; }
+.metric-card.prominent { background: linear-gradient(135deg, rgba(24,220,255,0.1), rgba(165,94,234,0.1)); border-color: rgba(24,220,255,0.3); }
+.metric-card.sparkline-card { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.metric-value.hours-saved { font-size: 36px; font-weight: 900; background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; line-height: 1.1; }
+.metric-label { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; font-weight: 700; margin-top: 6px; letter-spacing: 0.5px; }
+.metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 8px; }
+.metric-item { background: rgba(255,255,255,0.02); border-radius: var(--radius-sm); padding: 10px 8px; text-align: center; }
+.m-val { font-size: 18px; font-weight: 800; color: var(--text-primary); }
+.m-lbl { font-size: 9px; color: var(--text-muted); text-transform: uppercase; margin-top: 4px; }
 /* Ring Alert */
 .ring-alert { margin-bottom: 14px; }
 .ring-box { background: linear-gradient(135deg, rgba(165,94,234,0.1), rgba(55,66,250,0.08));

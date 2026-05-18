@@ -158,6 +158,14 @@
 
       // Poll raid status independently
       fetchRaidStatus();
+
+      // Fetch Time Saved Metrics
+      fetch('/api/metrics')
+        .then(function(res) { return res.json(); })
+        .then(function(mData) {
+          if (mData && mData.metrics) renderMetrics(mData.metrics);
+        })
+        .catch(function(e) { console.error('Metrics error:', e); });
     });
   }
 
@@ -168,7 +176,74 @@
     setTxt('s-shifted', s.shiftedCount || 0);
     setTxt('s-rings', s.coordGroupCount || 0);
     setTxt('s-health', s.healthScore || 0);
-    showEl('summary-grid');
+    showEl('summary-grid'); // keep summary grid just in case, but metrics-dashboard is main
+  }
+
+  function renderMetrics(m) {
+    if (!m) return;
+    setTxt('m-hours', m.hoursSaved || '0.0');
+    setTxt('m-actioned', m.accounts_actioned || 0);
+    setTxt('m-filtered', m.items_filtered || 0);
+    setTxt('m-bans', m.bans_issued || 0);
+    setTxt('m-rings', m.rings_detected || 0);
+    setTxt('m-appeals', m.appeals_sent || 0);
+    
+    var conversion = 0;
+    if (m.appeals_sent && m.appeals_sent > 0) {
+      conversion = Math.round((m.appeals_responded / m.appeals_sent) * 100);
+    }
+    setTxt('m-conversion', conversion + '%');
+    
+    showEl('metrics-dashboard');
+    
+    if (m.dailyActivity && m.dailyActivity.length > 0) {
+      drawSparkline('sparkline-chart', m.dailyActivity);
+    }
+  }
+
+  function drawSparkline(canvasId, data) {
+    var canvas = getEl(canvasId);
+    if (!canvas) return;
+    var ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    var w = canvas.width;
+    var h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    
+    var maxVal = 0;
+    for (var i = 0; i < data.length; i++) {
+      if (data[i].count > maxVal) maxVal = data[i].count;
+    }
+    if (maxVal === 0) maxVal = 10;
+    
+    var step = w / Math.max(1, data.length - 1);
+    
+    ctx.beginPath();
+    ctx.strokeStyle = '#18dcff';
+    ctx.lineWidth = 2;
+    ctx.lineJoin = 'round';
+    
+    // We expect 14 days, from oldest to newest. But dailyActivity currently gives 13 down to 0, which means oldest first.
+    for (var i = 0; i < data.length; i++) {
+      var val = data[i].count;
+      var x = i * step;
+      var y = h - ((val / maxVal) * (h - 4)) - 2;
+      
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    
+    ctx.stroke();
+    
+    // Fill
+    var gradient = ctx.createLinearGradient(0, 0, 0, h);
+    gradient.addColorStop(0, 'rgba(24, 220, 255, 0.4)');
+    gradient.addColorStop(1, 'rgba(24, 220, 255, 0)');
+    ctx.lineTo(w, h);
+    ctx.lineTo(0, h);
+    ctx.fillStyle = gradient;
+    ctx.fill();
   }
 
   function renderRingAlerts(groups) {

@@ -54,3 +54,9 @@ export {
   getAutoActionSettings,
   saveAutoActionSettings,
 } from './settings.js';
+
+// Metrics
+export {
+  incrementMetric,
+  getDashboardMetrics,
+} from './metrics.js';

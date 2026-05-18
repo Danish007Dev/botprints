@@ -47,6 +47,46 @@
       </div>
     </section>
 
+    <!-- Time Saved Metrics (New) -->
+    <section class="metrics-dashboard" id="metrics-dashboard" style="display:none">
+      <div class="metrics-primary">
+        <div class="metric-card prominent">
+          <div class="metric-value hours-saved" id="m-hours">0.0</div>
+          <div class="metric-label">Estimated Hours Saved 🕒</div>
+        </div>
+        <div class="metric-card sparkline-card">
+          <div class="metric-label">Flagged Accounts (14d)</div>
+          <canvas id="sparkline-chart" width="200" height="40"></canvas>
+        </div>
+      </div>
+      <div class="metrics-grid">
+        <div class="metric-item">
+          <div class="m-val" id="m-actioned">0</div>
+          <div class="m-lbl">Accounts Actioned</div>
+        </div>
+        <div class="metric-item">
+          <div class="m-val" id="m-filtered">0</div>
+          <div class="m-lbl">Items Filtered</div>
+        </div>
+        <div class="metric-item">
+          <div class="m-val" id="m-bans">0</div>
+          <div class="m-lbl">Bans Issued</div>
+        </div>
+        <div class="metric-item">
+          <div class="m-val" id="m-rings">0</div>
+          <div class="m-lbl">Rings Actioned</div>
+        </div>
+        <div class="metric-item">
+          <div class="m-val" id="m-appeals">0</div>
+          <div class="m-lbl">Appeals Sent</div>
+        </div>
+        <div class="metric-item">
+          <div class="m-val" id="m-conversion">0%</div>
+          <div class="m-lbl">Appeal Response Rate</div>
+        </div>
+      </div>
+    </section>
+
     <!-- Coordinated Ring Alert -->
     <section class="ring-alert" id="ring-alert" style="display:none"></section>
 
