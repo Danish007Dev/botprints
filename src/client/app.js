@@ -390,6 +390,8 @@
       filtered = allUsers.filter(function(u) { return u.shift && u.shift.shifted; });
     } else if (currentFilter === 'ring') {
       filtered = allUsers.filter(function(u) { return u.coordGroup; });
+    } else if (currentFilter === 'evaders') {
+      filtered = allUsers.filter(function(u) { return u.banEvasionMatch || (u.profile && u.profile.banEvasionMatch); });
     } else if (currentFilter === 'safe') {
       filtered = allClearedUsers;
     }
@@ -792,7 +794,7 @@
   // ─── View Switching ────────────────────────────────────────────────────────
   function switchView(view) {
     currentView = view;
-    var views = ['dashboard', 'settings', 'audit', 'appeals'];
+    var views = ['dashboard', 'settings', 'audit', 'appeals', 'intel'];
     for (var i = 0; i < views.length; i++) {
       var el = getEl('view-' + views[i]);
       if (el) el.style.display = views[i] === view ? '' : 'none';
@@ -806,6 +808,7 @@
     if (view === 'settings') loadSettings();
     if (view === 'audit') loadAuditLog();
     if (view === 'appeals') loadAppeals();
+    if (view === 'intel') loadSharedIntel();
   }
 
   // ─── Settings Panel ────────────────────────────────────────────────────────
@@ -938,6 +941,40 @@
       var lbl = getEl(labelId);
       if (lbl) lbl.textContent = formatter ? formatter(el.value) : el.value;
     });
+  }
+
+  // ─── Shared Intel Tab ──────────────────────────────────────────────────────
+
+  function loadSharedIntel() {
+    var container = getEl('intel-entries');
+    if (!container) return;
+    
+    // Check if any tracked users have sharedThreat data
+    var intelUsers = allUsers.filter(function(u) {
+      return u.profile && u.profile.sharedThreat;
+    });
+    
+    if (intelUsers.length === 0) {
+      container.innerHTML = '<div class="audit-empty" id="intel-empty">No cross-subreddit threats detected yet. When the Shared Threat Layer identifies known ring members in your community, they will appear here.</div>';
+      return;
+    }
+    
+    var html = '';
+    for (var i = 0; i < intelUsers.length; i++) {
+      var u = intelUsers[i];
+      var t = u.profile.sharedThreat;
+      var date = new Date(t.detectedAt || Date.now());
+      html += '<div class="audit-entry">' +
+        '<div class="audit-time">' + date.toLocaleString() + '</div>' +
+        '<div class="audit-body">' +
+          '<span class="audit-action audit-ban">\ud83c\udf10 Shared Intel</span>' +
+          '<span class="audit-user">u/' + u.username + '</span>' +
+          '<span class="audit-by">from r/' + (t.originSubreddit || 'unknown') + '</span>' +
+        '</div>' +
+        '<div class="audit-detail">Confirmed bot ring member detected via cross-subreddit behavioral fingerprinting. Risk score: ' + u.score + '/100. Confidence: ' + Math.round((t.confidence || 0) * 100) + '%</div>' +
+      '</div>';
+    }
+    container.innerHTML = html;
   }
 
   // ─── Audit Log Tab ─────────────────────────────────────────────────────────

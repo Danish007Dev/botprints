@@ -90,24 +90,24 @@
     <!-- Coordinated Ring Alert -->
     <section class="ring-alert" id="ring-alert" style="display:none"></section>
 
-    <!-- Primary Navigation Tabs -->
     <nav class="nav-tabs" id="nav-tabs">
       <button class="nav-tab active" data-view="dashboard">📊 Dashboard</button>
       <button class="nav-tab" data-view="appeals">⚖️ Appeals <span class="nav-badge" id="appeals-badge" style="display:none">0</span></button>
-      <button class="nav-tab" data-view="settings">⚙️ Settings</button>
       <button class="nav-tab" data-view="audit">📋 Audit Log</button>
+      <button class="nav-tab" data-view="intel">🌐 Shared Intel</button>
+      <button class="nav-tab" data-view="settings">⚙️ Settings</button>
     </nav>
 
     <!-- Dashboard View -->
     <div id="view-dashboard">
-      <!-- Filters -->
       <nav class="filters">
         <button class="filter-tab active" data-filter="all">All</button>
         <button class="filter-tab" data-filter="high">🔴 High Risk</button>
         <button class="filter-tab" data-filter="shifted">⚡ Shifted</button>
         <button class="filter-tab" data-filter="ring">🔗 Bot Ring</button>
-        <button class="filter-tab" data-filter="safe">✓ Safe</button>
+        <button class="filter-tab" data-filter="evaders">🕵️ Ban Evaders</button>
         <button class="filter-tab" data-filter="appeals">⏳ Awaiting Appeal</button>
+        <button class="filter-tab" data-filter="safe">✓ Safe</button>
       </nav>
       <main class="grid" id="user-grid"></main>
     </div>
@@ -274,6 +274,19 @@
       </div>
     </div>
 
+    <!-- Shared Intel View -->
+    <div id="view-intel" style="display:none">
+      <div class="audit-panel">
+        <div class="audit-header">
+          <h2>🌐 Cross-Subreddit Shared Threat Intelligence</h2>
+          <p class="audit-desc">Pre-flagged accounts detected by the shared threat network. These users were confirmed members of bot rings in other participating subreddits.</p>
+        </div>
+        <div class="audit-entries" id="intel-entries">
+          <div class="audit-empty" id="intel-empty">Shared Threat Layer is currently disabled. Enable it in Settings → Scheduling & Integrations to participate in the network.</div>
+        </div>
+      </div>
+    </div>
+
     <div class="empty-state" id="empty-state" style="display:none">
       <div class="empty-icon">🔍</div>
       <h2>No users analyzed yet</h2>
@@ -293,25 +306,43 @@
           <button class="btn-close" id="btn-close-help">✕</button>
         </div>
         <div class="help-body">
-          <p><strong>Risk Score (0-100):</strong> Higher score means more bot-like behavior.</p>
-          <p><strong>User Stats:</strong> <br/>
-             • <strong>Posts / Comments:</strong> Volume of activity.<br/>
-             • <strong>Edits:</strong> Number of times they changed their posts/comments.<br/>
-             • <strong>Days Active:</strong> How long we've been tracking them.</p>
+          <h3 style="color: var(--accent-cyan); margin-bottom: 12px;">🚀 Quick Start (3 Steps)</h3>
+          <ol style="font-size: 13px; line-height: 1.8; margin-bottom: 18px; padding-left: 18px;">
+            <li><strong>Configure Thresholds</strong> — Go to ⚙️ Settings and set your Low/Medium/High risk cutoffs. Start conservative (60/80/90).</li>
+            <li><strong>Set Appeal Message</strong> — Customize the message users see when content is removed. Use {username} and {subreddit} variables.</li>
+            <li><strong>Choose Opt-ins</strong> — Enable Raid Alerts, New Account Amplifier, and Shared Threat Layer based on your community's needs.</li>
+          </ol>
+          <hr style="border-color: var(--border); margin: 15px 0;">
+
+          <p><strong>Risk Score (0-100):</strong> Composite of 6 behavioral signals. Higher = more bot-like behavior.</p>
+
+          <p><strong>4-Tier Enforcement:</strong><br/>
+             • <strong>👁 Watch (Tier 0):</strong> Silent monitoring — get modmail alerts on new activity.<br/>
+             • <strong>🔽 Filter (Tier 1):</strong> Future content auto-routed to modqueue for review.<br/>
+             • <strong>⚠ Remove + Appeal (Tier 2):</strong> Content removed, user gets a chance to appeal via modmail.<br/>
+             • <strong>🚫 Ban + Report (Tier 3):</strong> Permanent ban, content reported to Reddit admins.</p>
+
           <p><strong>Badges:</strong><br/>
              • <strong>✓ Consistent:</strong> Normal, steady behavior.<br/>
              • <strong>⚡ Shift:</strong> Sudden change in posting patterns (possible account purchase).<br/>
              • <strong>🔗 Bot Ring:</strong> Posts at the exact same time as other accounts.<br/>
-             • <strong>🆕 New Account:</strong> Account age below threshold — score multiplied for extra scrutiny.<br/>
+             • <strong>🆕 New Account:</strong> Account age below threshold — score amplified for extra scrutiny.<br/>
              • <strong>🕵️ Ban Evader:</strong> Behavioral fingerprint matches a previously banned account.<br/>
              • <strong>🌐 Shared Intel:</strong> Flagged by the cross-subreddit threat network.</p>
+
           <p><strong>Signals (6-Axis Radar Chart):</strong><br/>
-             • <strong>Time (Temporal):</strong> Unnatural posting speed.<br/>
-             • <strong>Day (Circadian):</strong> Never sleeps, posts 24/7.<br/>
-             • <strong>Act (Engage):</strong> Weird post-to-comment ratio.<br/>
-             • <strong>Edit (Edit Rate):</strong> Edits content too frequently.<br/>
-             • <strong>Spk (Burst):</strong> Long silence followed by sudden spam.<br/>
-             • <strong>Vote (Correlation):</strong> Suspiciously uniform upvote patterns across posts.</p>
+             • <strong>Time (Temporal):</strong> Unnatural posting regularity — bots use cron jobs.<br/>
+             • <strong>Day (Circadian):</strong> Posts 24/7 without a sleep cycle.<br/>
+             • <strong>Act (Engage):</strong> Abnormal post-to-comment ratio.<br/>
+             • <strong>Edit (Edit Rate):</strong> Never edits — AI doesn't make typos.<br/>
+             • <strong>Spk (Burst):</strong> Long silence then batch posting spam.<br/>
+             • <strong>Vote (Correlation):</strong> Suspiciously uniform upvote patterns (astroturfing).</p>
+
+          <p><strong>Advanced Features:</strong><br/>
+             • <strong>⚠️ Raid Detection:</strong> Automatic alert when multiple suspicious accounts post within minutes.<br/>
+             • <strong>🤖 AutoMod Generator:</strong> Auto-generates ready-to-use AutoMod rules from detected patterns.<br/>
+             • <strong>🕵️ Ban Evasion Detection:</strong> Cosine similarity matching against banned users' behavioral fingerprints.<br/>
+             • <strong>🌐 Shared Threat Layer:</strong> Cross-subreddit intelligence sharing for confirmed bot rings (opt-in).</p>
         </div>
       </div>
     </div>
