@@ -167,3 +167,37 @@ body {
   .summary-grid { grid-template-columns: repeat(3, 1fr); }
   .signals { grid-template-columns: repeat(3, 1fr); }
 }
+
+/* Access Denied Screen */
+.access-denied {
+  text-align: center;
+  padding: 60px 20px;
+  max-width: 420px;
+  margin: 40px auto 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+}
+.denied-icon {
+  font-size: 56px;
+  margin-bottom: 16px;
+  filter: drop-shadow(0 0 20px rgba(255,71,87,0.3));
+}
+.access-denied h2 {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--accent-red);
+  margin-bottom: 12px;
+}
+.access-denied p {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: 8px;
+}
+.access-denied .denied-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 8px;
+}

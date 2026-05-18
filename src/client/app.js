@@ -50,6 +50,9 @@
   function fetchDashboard() {
     return fetch('/api/dashboard')
       .then(function(res) {
+        if (res.status === 403) {
+          return { _accessDenied: true, users: [], coordGroups: [], summary: null };
+        }
         if (!res.ok) throw new Error('HTTP ' + res.status);
         return res.json();
       })
@@ -88,6 +91,35 @@
     if (grid) grid.innerHTML = '';
 
     return fetchDashboard().then(function(data) {
+      // ─── SECURITY: Block non-moderator access at the UI level ─────────
+      if (data && data._accessDenied) {
+        hideEl('loading');
+        hideEl('summary-grid');
+        hideEl('ring-alert');
+        hideEl('empty-state');
+        var grid = getEl('user-grid');
+        if (grid) grid.innerHTML = '';
+        // Hide mod-only controls
+        var header = document.querySelector('.header-right');
+        if (header) header.style.display = 'none';
+        var filters = document.querySelector('.filters');
+        if (filters) filters.style.display = 'none';
+        // Show access denied
+        var app = getEl('app');
+        if (app) {
+          var denied = document.createElement('div');
+          denied.className = 'access-denied';
+          denied.innerHTML =
+            '<div class="denied-icon">🔒</div>' +
+            '<h2>Moderator Access Only</h2>' +
+            '<p>The BotPrints Behavioral Forensics Dashboard is restricted to subreddit moderators.</p>' +
+            '<p class="denied-sub">If you are a moderator, please ensure you are logged into an account with moderator privileges for this subreddit.</p>';
+          app.appendChild(denied);
+        }
+        return;
+      }
+      // ────────────────────────────────────────────────────────────────────
+
       allUsers = (data && data.users) || [];
       allClearedUsers = (data && data.clearedUsers) || [];
       coordGroups = (data && data.coordGroups) || [];

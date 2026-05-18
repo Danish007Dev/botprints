@@ -18,6 +18,18 @@ menu.post('/open-dashboard', async (c) => {
       entry: 'default',
     });
 
+    // ─── SECURITY: Hide dashboard from public feed ────────────────────────
+    // Custom posts are public by default. We immediately remove the post
+    // so it's hidden from the subreddit feed and search. Moderators can
+    // still access removed posts, keeping the dashboard mod-only.
+    try {
+      await post.remove();
+      await post.distinguish();
+    } catch (modErr) {
+      console.warn('BotPrints: Could not remove/distinguish dashboard post:', modErr);
+      // Continue anyway — the menu action is already mod-gated
+    }
+
     const postUrl = post.url.startsWith('http')
       ? post.url
       : `https://www.reddit.com${post.permalink}`;

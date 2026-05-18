@@ -32,6 +32,24 @@ api.get('/health', (c) => c.json({ status: 'ok', app: 'botprints', version: '0.2
 // ─── Dashboard Data ─────────────────────────────────────────────────────────
 api.get('/dashboard', async (c) => {
   try {
+    // ─── SECURITY: Verify the requesting user is a moderator ──────────
+    const currentUser = await reddit.getCurrentUser();
+    const subreddit = await reddit.getCurrentSubreddit();
+
+    if (!currentUser) {
+      return c.json({ error: 'unauthorized', message: 'Not logged in' }, 403);
+    }
+
+    const mods = await reddit.getModerators({
+      subredditName: subreddit.name,
+      username: currentUser.username,
+    }).all();
+
+    if (mods.length === 0) {
+      return c.json({ error: 'forbidden', message: 'Moderator access required' }, 403);
+    }
+    // ──────────────────────────────────────────────────────────────────────
+
     const topUsers = await getTopRiskyUsers(20);
     const baseline = await getCommunityBaseline();
     const allUsernames = await getAllUsernames();
