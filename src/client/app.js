@@ -681,6 +681,11 @@
     if (user.isCleared) {
       html += '<button class="btn-action action-undismiss" data-user="' + uname + '">↺ Re-Analyze</button>';
     } else {
+      // AutoMod Rule Generator button for ring members
+      if (user.suggestedRule) {
+        html += '<button class="btn-action action-automod" style="width: 100%; margin-bottom: 8px; background: rgba(156, 39, 176, 0.2); border-color: #9c27b0; color: #e056fd;">🤖 Generate AutoMod Rule</button>';
+      }
+      
       // 3-Tier Enforcement buttons
       html += '<button class="btn-action action-watch" data-user="' + uname + '">' + (user.isWatched ? '👁 Watched' : '👁 Watch') + '</button>' +
         '<button class="btn-action action-filter" data-user="' + uname + '">🔽 Filter</button>' +
@@ -726,6 +731,21 @@
     if (undismissBtn) undismissBtn.addEventListener('click', function(ev) {
       ev.stopPropagation();
       onUndismissUser(uname);
+    });
+
+    var automodBtn = card.querySelector('.action-automod');
+    if (automodBtn) automodBtn.addEventListener('click', function(ev) {
+      ev.stopPropagation();
+      
+      var modal = getEl('automod-modal');
+      var reasonEl = getEl('automod-reason');
+      var ruleEl = getEl('automod-rule-text');
+      
+      if (modal && reasonEl && ruleEl) {
+        reasonEl.textContent = user.ruleReason || 'Pattern detected.';
+        ruleEl.value = user.suggestedRule || '';
+        showEl('automod-modal');
+      }
     });
 
     return card;
@@ -1110,5 +1130,58 @@
     .then(function(data) {
       if (data.appeals) updateAppealsBadge(data.appeals.length);
     }).catch(function(){});
+
+  // ─── AutoMod Generator Modal Listeners ────────────────────────────────────
+  var btnCloseAutomod = getEl('btn-close-automod');
+  if (btnCloseAutomod) {
+    btnCloseAutomod.addEventListener('click', function() { hideEl('automod-modal'); });
+  }
+
+  var btnCopyAutomod = getEl('btn-copy-automod');
+  if (btnCopyAutomod) {
+    btnCopyAutomod.addEventListener('click', function() {
+      var ruleText = getEl('automod-rule-text');
+      if (ruleText) {
+        ruleText.select();
+        document.execCommand('copy');
+        showToast('Rule copied to clipboard!', 'success');
+      }
+    });
+  }
+
+  var btnApplyAutomod = getEl('btn-apply-automod');
+  if (btnApplyAutomod) {
+    btnApplyAutomod.addEventListener('click', function() {
+      var ruleText = getEl('automod-rule-text');
+      if (!ruleText) return;
+      
+      if (!confirm("This will immediately append the rule to your subreddit's AutoModerator configuration. Continue?")) return;
+      
+      btnApplyAutomod.disabled = true;
+      btnApplyAutomod.textContent = 'Applying...';
+      
+      fetch('/api/automod/apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rule: ruleText.value })
+      })
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        btnApplyAutomod.disabled = false;
+        btnApplyAutomod.textContent = '⚡ Apply Automatically';
+        if (data.status === 'ok') {
+          showToast('Rule successfully appended to AutoModerator config!', 'success');
+          hideEl('automod-modal');
+        } else {
+          showToast('Failed to apply rule: ' + data.message, 'error');
+        }
+      })
+      .catch(function(err) {
+        btnApplyAutomod.disabled = false;
+        btnApplyAutomod.textContent = '⚡ Apply Automatically';
+        showToast('Network error applying rule.', 'error');
+      });
+    });
+  }
 
 })();

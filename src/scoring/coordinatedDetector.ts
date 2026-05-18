@@ -117,11 +117,50 @@ export function detectCoordinatedGroups(
         : 0;
     const totalShared = groupEdges.reduce((s, e) => s + e.shared, 0);
 
+    // Generate AutoMod Rule based on group behavior
+    let suggestedRule = '';
+    let ruleReason = '';
+    
+    // Check if the group exhibits karma farming behavior (high posts, 0/low comments)
+    let totalPosts = 0;
+    let totalComments = 0;
+    for (const m of members) {
+      const p = candidates.find(c => c.username === m)?.profile;
+      if (p) {
+        totalPosts += p.posts;
+        totalComments += p.comments;
+      }
+    }
+    
+    if (totalComments === 0 && totalPosts > 5) {
+      ruleReason = 'Bot ring pattern detected: Karma Farming (High posts, zero comments).';
+      suggestedRule = `---
+# BotPrints Auto-Generated: Karma Farming Prevention
+type: submission
+author:
+    comment_karma: "< 5"
+action: remove
+action_reason: "Low comment karma (BotPrints detected pattern)"
+---`;
+    } else {
+      ruleReason = 'Bot ring pattern detected: New Account Swarm.';
+      suggestedRule = `---
+# BotPrints Auto-Generated: Account Age Filter
+type: any
+author:
+    account_age: "< 14 days"
+action: filter
+action_reason: "New account requires review (BotPrints detected pattern)"
+---`;
+    }
+
     groups.push({
       id: `ring-${++groupIdx}`,
       members,
       avgCorrelation: Math.round(avgSim * 100) / 100,
       sharedWindows: totalShared,
+      suggestedRule,
+      ruleReason
     });
   }
 

@@ -20,7 +20,6 @@ import {
   addToFilterList,
   setAppealStatus,
   getAppealStatus,
-  clearAppealStatus,
   appendAuditEntry,
   // Raid Detection
   getRaidState,
@@ -100,11 +99,19 @@ api.get('/dashboard', async (c) => {
 
     // Coordinated group detection
     const coordGroups = detectCoordinatedGroups(scoredUsers);
-    // Tag users with their group ID
+    // Tag users with their group ID and rule suggestions
     for (const group of coordGroups) {
       for (const member of group.members) {
         const user = scoredUsers.find(u => u.username === member);
-        if (user) user.coordGroup = group.id;
+        if (user) {
+          user.coordGroup = group.id;
+          if (group.suggestedRule !== undefined) {
+            user.suggestedRule = group.suggestedRule;
+          }
+          if (group.ruleReason !== undefined) {
+            user.ruleReason = group.ruleReason;
+          }
+        }
       }
     }
 
@@ -597,6 +604,51 @@ api.get('/raid-status', async (c) => {
     return c.json({ raid: state });
   } catch (err) {
     return c.json({ raid: null });
+  }
+});
+
+// ─── AutoMod Rule Applier ───────────────────────────────────────────────────
+api.post('/automod/apply', async (c) => {
+  try {
+    const { rule } = await c.req.json<{ rule: string }>();
+    if (!rule) {
+      return c.json({ status: 'error', message: 'No rule provided' });
+    }
+
+    const subreddit = await reddit.getCurrentSubreddit();
+    const currentUser = await reddit.getCurrentUser();
+
+    // Fetch the existing automod config
+    let config = '';
+    try {
+      const page = await reddit.getWikiPage(subreddit.name, 'config/automoderator');
+      config = page.content;
+    } catch (e) {
+      // Wiki page might not exist yet, that's fine, we create it
+    }
+
+    // Append the new rule
+    const newConfig = config.trim() + '\n\n' + rule;
+    
+    // Update the wiki page
+    await reddit.updateWikiPage({
+      subredditName: subreddit.name,
+      page: 'config/automoderator',
+      content: newConfig,
+      reason: 'BotPrints: Applied auto-generated ring defense rule',
+    });
+
+    await appendAuditEntry({
+      timestamp: Date.now(),
+      action: 'watch',
+      username: 'automod',
+      performedBy: currentUser?.username || 'unknown',
+      details: 'Applied BotPrints generated AutoMod rule',
+    });
+
+    return c.json({ status: 'ok' });
+  } catch (err) {
+    return c.json({ status: 'error', message: String(err) });
   }
 });
 

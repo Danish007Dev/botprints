@@ -74,6 +74,8 @@ export interface ScoredUser {
   shift: ShiftResult;
   profile: UserProfile;
   coordGroup?: string; // group ID if part of a coordinated ring
+  suggestedRule?: string; // AutoMod YAML string
+  ruleReason?: string; // Reason for generating the rule
   isWatched?: boolean;
   isCleared?: boolean;
 }
@@ -83,6 +85,8 @@ export interface CoordinatedGroup {
   members: string[]; // usernames
   avgCorrelation: number; // 0-1
   sharedWindows: number; // how many 5-min windows overlap
+  suggestedRule?: string; // YAML
+  ruleReason?: string;
 }
 
 export interface SubredditSummary {

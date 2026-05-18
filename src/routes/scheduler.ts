@@ -32,7 +32,6 @@ import {
   computeEditRate,
 } from '../signals/index.js';
 import { detectCoordinatedGroups } from '../scoring/coordinatedDetector.js';
-import { detectBehavioralShift } from '../scoring/shiftDetector.js';
 import { DEFAULT_BASELINE } from '../types/index.js';
 import type { CommunityBaseline, ScoredUser } from '../types/index.js';
 import { pushSharedThreat } from '../storage/threats.js';

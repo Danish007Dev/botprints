@@ -311,6 +311,25 @@
         </div>
       </div>
     </div>
+
+    <!-- AutoMod Generator Modal -->
+    <div class="help-modal" id="automod-modal" style="display:none">
+      <div class="help-content" style="max-width: 500px;">
+        <div class="help-header">
+          <h2>🤖 AutoMod Rule Generator</h2>
+          <button class="btn-close" id="btn-close-automod">✕</button>
+        </div>
+        <div class="help-body">
+          <p id="automod-reason" style="font-size: 13px; color: var(--accent-cyan); margin-bottom: 10px;"></p>
+          <p style="font-size: 12px; margin-bottom: 5px;">Generated YAML configuration:</p>
+          <textarea id="automod-rule-text" style="width: 100%; height: 200px; font-family: monospace; font-size: 11px; background: rgba(0,0,0,0.3); color: #2ed573; padding: 10px; border: 1px solid var(--border); border-radius: 4px; resize: vertical;"></textarea>
+          <div style="margin-top: 15px; display: flex; gap: 10px;">
+            <button class="btn action-safe" id="btn-copy-automod" style="flex: 1;">📋 Copy to Clipboard</button>
+            <button class="btn action-filter" id="btn-apply-automod" style="flex: 1;">⚡ Apply Automatically</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
   <script type="module" src="./app.js"></script>
 </body>
