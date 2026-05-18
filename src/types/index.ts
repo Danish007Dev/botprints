@@ -28,6 +28,7 @@ export interface UserProfile {
   edits: number;
   postTimestamps: number[]; // max 50, Unix ms
   hourBuckets: number[]; // always length 24
+  voteScoreDeltas: number[]; // post score snapshots for vote correlation, max 20
   firstSeen: number;
   lastUpdated: number;
   sharedThreat?: SharedThreat;
@@ -50,6 +51,7 @@ export const DEFAULT_PROFILE = (username: string): UserProfile => ({
   edits: 0,
   postTimestamps: [],
   hourBuckets: new Array<number>(24).fill(0),
+  voteScoreDeltas: [],
   firstSeen: Date.now(),
   lastUpdated: Date.now(),
 });
@@ -66,9 +68,10 @@ export const DEFAULT_BASELINE: CommunityBaseline = {
 export interface ScoreBreakdown {
   temporal: number; // 0-25
   circadian: number; // 0-20
-  engagement: number; // 0-20
-  editRate: number; // 0-15
-  burstSilence: number; // 0-20 — NEW: burst-silence pattern
+  engagement: number; // 0-15
+  editRate: number; // 0-10
+  burstSilence: number; // 0-15
+  voteCorrelation: number; // 0-15 — vote timing correlation
   total: number; // 0-100
   hasEnoughData: boolean;
 }
@@ -83,13 +86,15 @@ export interface ShiftResult {
 export interface ScoredUser {
   username: string;
   score: number;
+  amplifiedScore?: number; // score after new account multiplier
+  isNewAccount?: boolean; // true if multiplier was applied
   breakdown: ScoreBreakdown;
   shift: ShiftResult;
   profile: UserProfile;
-  coordGroup?: string; // group ID if part of a coordinated ring
-  suggestedRule?: string; // AutoMod YAML string
-  ruleReason?: string; // Reason for generating the rule
-  banEvasionMatch?: BanEvasionMatch; // Fingerprint match result
+  coordGroup?: string;
+  suggestedRule?: string;
+  ruleReason?: string;
+  banEvasionMatch?: BanEvasionMatch;
   isWatched?: boolean;
   isCleared?: boolean;
 }

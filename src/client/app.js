@@ -461,10 +461,10 @@
 
   function createRadarSVG(b) {
     if (!b) b = {};
-    var vals = [b.temporal || 0, b.circadian || 0, b.engagement || 0, b.editRate || 0, b.burstSilence || 0];
-    var maxes = [25, 20, 20, 15, 20];
-    var labels = ['Time', 'Day', 'Act', 'Edit', 'Spk'];
-    var cx = 55, cy = 55, radius = 40, n = 5;
+    var vals = [b.temporal || 0, b.circadian || 0, b.engagement || 0, b.editRate || 0, b.burstSilence || 0, b.voteCorrelation || 0];
+    var maxes = [25, 20, 15, 10, 15, 15];
+    var labels = ['Time', 'Day', 'Act', 'Edit', 'Spk', 'Vote'];
+    var cx = 55, cy = 55, radius = 40, n = 6;
 
     var angles = [];
     for (var i = 0; i < n; i++) angles.push((Math.PI * 2 * i) / n - Math.PI / 2);
@@ -540,6 +540,7 @@
     if (profile.sharedThreat) {
       badges += '<span class="badge badge-threat">🌐 Shared Intel: Detected in r/' + profile.sharedThreat.originSubreddit + '</span>';
     }
+    if (user.isNewAccount) badges += '<span class="badge badge-newaccount">🆕 New Account</span>';
     if (user.shift && user.shift.shifted) badges += '<span class="badge badge-shifted">⚡ Behavior Changed</span>';
     if (user.coordGroup) badges += '<span class="badge badge-ring">🔗 Coordinated Group</span>';
     if (!badges) badges = '<span class="badge badge-stable">✓ Normal Behavior</span>';
@@ -669,14 +670,18 @@
             '<div class="user-badges">' + badges + '</div>' +
           '</div>' +
         '</div>' +
-        '<div><div class="score-badge ' + risk + '">' + (user.score || 0) + '</div><div class="score-label">Risk</div></div>' +
+        '<div><div class="score-badge ' + risk + '">' + (user.amplifiedScore || user.score || 0) + '</div>' +
+          (user.isNewAccount ? '<div class="score-label" style="color: #ffa502;">Amplified</div>' : '<div class="score-label">Risk</div>') +
+          (user.isNewAccount && user.amplifiedScore ? '<div style="font-size: 10px; color: var(--text-secondary); text-align: center;">(raw: ' + user.score + ')</div>' : '') +
+        '</div>' +
       '</div>' +
       '<div class="signals">' +
         sigHTML('Timing', b.temporal || 0, 25) +
         sigHTML('Daily Pattern', b.circadian || 0, 20) +
-        sigHTML('Activity', b.engagement || 0, 20) +
-        sigHTML('Edits', b.editRate || 0, 15) +
-        sigHTML('Spikes', b.burstSilence || 0, 20) +
+        sigHTML('Activity', b.engagement || 0, 15) +
+        sigHTML('Edits', b.editRate || 0, 10) +
+        sigHTML('Spikes', b.burstSilence || 0, 15) +
+        sigHTML('Votes', b.voteCorrelation || 0, 15) +
       '</div>' +
       '<div class="card-details"><div class="details-inner">' +
         '<div class="radar-row">' + createRadarSVG(b) + '</div>';
@@ -688,9 +693,10 @@
       var bannedBreakdown = {
         temporal: Math.round((fp.vector[0] || 0) * 25),
         circadian: Math.round((fp.vector[1] || 0) * 20),
-        engagement: Math.round((fp.vector[2] || 0) * 20),
-        editRate: Math.round((fp.vector[3] || 0) * 15),
-        burstSilence: Math.round((fp.vector[4] || 0) * 20)
+        engagement: Math.round((fp.vector[2] || 0) * 15),
+        editRate: Math.round((fp.vector[3] || 0) * 10),
+        burstSilence: Math.round((fp.vector[4] || 0) * 15),
+        voteCorrelation: 0
       };
       html += '<div class="fingerprint-compare" style="margin-top: 12px; padding: 10px; background: rgba(255, 87, 34, 0.08); border: 1px solid rgba(255, 87, 34, 0.25); border-radius: 6px;">' +
         '<div style="font-size: 11px; color: #ff5722; font-weight: 600; margin-bottom: 8px;">\ud83d\udd75\ufe0f FINGERPRINT COMPARISON (' + Math.round(bem2.similarity * 100) + '% match)</div>' +

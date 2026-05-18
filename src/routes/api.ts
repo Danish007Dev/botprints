@@ -72,6 +72,7 @@ api.get('/dashboard', async (c) => {
     const topUsers = await getTopRiskyUsers(20);
     const baseline = await getCommunityBaseline();
     const allUsernames = await getAllUsernames();
+    const settings = await getAutoActionSettings();
     const scoredUsers: ScoredUser[] = [];
 
     for (const { username } of topUsers) {
@@ -82,6 +83,16 @@ api.get('/dashboard', async (c) => {
         const shift = detectBehavioralShift(history);
         const isWatched = await isUserWatched(username);
         const entry: ScoredUser = { username, score: breakdown.total, breakdown, shift, profile, isWatched };
+
+        // New Account Amplifier
+        if (settings.newAccountAmplifier) {
+          const accountAgeDays = (Date.now() - profile.firstSeen) / (1000 * 60 * 60 * 24);
+          if (accountAgeDays < settings.newAccountThresholdDays) {
+            entry.isNewAccount = true;
+            entry.amplifiedScore = Math.min(100, Math.round(breakdown.total * settings.newAccountMultiplier));
+          }
+        }
+
         if (profile.banEvasionMatch) {
           entry.banEvasionMatch = profile.banEvasionMatch;
         }

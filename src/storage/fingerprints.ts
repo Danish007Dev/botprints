@@ -10,15 +10,16 @@ const FINGERPRINT_KEY = 'bp:banned_fingerprints';
 
 /**
  * Normalize a ScoreBreakdown into a unit vector [0-1] per dimension.
- * The 5 dimensions map to: temporal, circadian, engagement, editRate, burstSilence
+ * The 6 dimensions map to: temporal, circadian, engagement, editRate, burstSilence, voteCorrelation
  */
 export function buildFingerprintVector(breakdown: ScoreBreakdown): number[] {
   return [
-    breakdown.temporal / 25,       // max 25
-    breakdown.circadian / 20,      // max 20
-    breakdown.engagement / 20,     // max 20
-    breakdown.editRate / 15,       // max 15
-    breakdown.burstSilence / 20,   // max 20
+    breakdown.temporal / 25,            // max 25
+    breakdown.circadian / 20,           // max 20
+    breakdown.engagement / 15,          // max 15
+    breakdown.editRate / 10,            // max 10
+    breakdown.burstSilence / 15,        // max 15
+    breakdown.voteCorrelation / 15,     // max 15
   ];
 }
 

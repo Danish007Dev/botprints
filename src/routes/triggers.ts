@@ -96,13 +96,14 @@ triggers.post('/on-mod-mail', async (c) => {
 });
 
 // ─── Helper: Get highest signal name from a score breakdown ─────────────────
-function getHighestSignal(breakdown: { temporal: number; circadian: number; engagement: number; editRate: number; burstSilence: number }): string {
+function getHighestSignal(breakdown: { temporal: number; circadian: number; engagement: number; editRate: number; burstSilence: number; voteCorrelation: number }): string {
   const signals = [
     { name: 'Timing regularity', value: breakdown.temporal, max: 25 },
     { name: 'Circadian pattern (24/7 activity)', value: breakdown.circadian, max: 20 },
-    { name: 'Engagement ratio', value: breakdown.engagement, max: 20 },
-    { name: 'Edit frequency', value: breakdown.editRate, max: 15 },
-    { name: 'Burst-silence pattern', value: breakdown.burstSilence, max: 20 },
+    { name: 'Engagement ratio', value: breakdown.engagement, max: 15 },
+    { name: 'Edit frequency', value: breakdown.editRate, max: 10 },
+    { name: 'Burst-silence pattern', value: breakdown.burstSilence, max: 15 },
+    { name: 'Vote correlation', value: breakdown.voteCorrelation, max: 15 },
   ];
   // Sort by normalized value (value/max) descending
   signals.sort((a, b) => (b.value / b.max) - (a.value / a.max));
@@ -386,6 +387,33 @@ triggers.post('/on-post-create', async (c) => {
     return c.json<TriggerResponse>({ status: 'success' }, 200);
   } catch (err) {
     console.error('BotPrints: Error in onPostCreate trigger:', err);
+    return c.json<TriggerResponse>({ status: 'success' }, 200);
+  }
+});
+
+// ─── onPostUpdate ───────────────────────────────────────────────────────────
+// Tracks post score deltas for Vote Correlation signal (6th signal).
+triggers.post('/on-post-update', async (c) => {
+  try {
+    const input = await c.req.json<OnPostUpdateRequest>();
+    const username = input.author?.name;
+    if (!username || username === 'AutoModerator') {
+      return c.json<TriggerResponse>({ status: 'success' }, 200);
+    }
+
+    const score = input.post?.score;
+    if (typeof score === 'number' && score > 0) {
+      const profile = await getUserProfile(username);
+      if (!profile.voteScoreDeltas) {
+        profile.voteScoreDeltas = [];
+      }
+      profile.voteScoreDeltas = [...profile.voteScoreDeltas, score].slice(-20);
+      await saveUserProfile(username, profile);
+    }
+
+    return c.json<TriggerResponse>({ status: 'success' }, 200);
+  } catch (err) {
+    console.error('BotPrints: Error in onPostUpdate trigger:', err);
     return c.json<TriggerResponse>({ status: 'success' }, 200);
   }
 });

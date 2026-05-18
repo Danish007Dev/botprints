@@ -52,6 +52,7 @@ export const DEMO_PROFILES: UserProfile[] = [
     posts: 47, comments: 3, edits: 0,
     postTimestamps: makeBotTimestamps(SHARED_BASE, 35),
     hourBuckets: makeHourBuckets('uniform'),
+    voteScoreDeltas: [5, 5, 6, 5, 5, 6, 5, 5, 5, 6], // suspiciously uniform
     firstSeen: NOW - 7 * DAY,
     lastUpdated: NOW,
   },
@@ -60,6 +61,7 @@ export const DEMO_PROFILES: UserProfile[] = [
     posts: 32, comments: 1, edits: 0,
     postTimestamps: makeBotTimestamps(SHARED_BASE, 20),
     hourBuckets: makeHourBuckets('uniform'),
+    voteScoreDeltas: [4, 5, 4, 5, 4, 5, 4, 5], // suspiciously uniform
     firstSeen: NOW - 5 * DAY,
     lastUpdated: NOW,
   },
@@ -68,6 +70,7 @@ export const DEMO_PROFILES: UserProfile[] = [
     posts: 12, comments: 45, edits: 8,
     postTimestamps: makeHumanTimestamps(12),
     hourBuckets: makeHourBuckets('human'),
+    voteScoreDeltas: [1, 15, 3, 42, 7, 2, 23, 1], // natural variation
     firstSeen: NOW - 30 * DAY,
     lastUpdated: NOW,
   },
@@ -76,6 +79,7 @@ export const DEMO_PROFILES: UserProfile[] = [
     posts: 25, comments: 20, edits: 2,
     postTimestamps: makeBotTimestamps([], 25),
     hourBuckets: makeHourBuckets('night'),
+    voteScoreDeltas: [3, 3, 4, 3, 3, 4, 3, 3, 4], // slightly uniform
     firstSeen: NOW - 14 * DAY,
     lastUpdated: NOW,
   },
@@ -84,6 +88,7 @@ export const DEMO_PROFILES: UserProfile[] = [
     posts: 8, comments: 67, edits: 15,
     postTimestamps: makeHumanTimestamps(8),
     hourBuckets: makeHourBuckets('human'),
+    voteScoreDeltas: [2, 30, 1, 8, 55, 3, 12], // natural variation
     firstSeen: NOW - 60 * DAY,
     lastUpdated: NOW,
   },

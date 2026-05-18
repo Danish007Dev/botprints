@@ -719,3 +719,8 @@ body {
   color: #ff5722;
   border: 1px solid rgba(255, 87, 34, 0.3);
 }
+.badge-newaccount {
+  background: rgba(0, 188, 212, 0.15);
+  color: #00bcd4;
+  border: 1px solid rgba(0, 188, 212, 0.3);
+}
