@@ -137,6 +137,7 @@ export async function runDailyAnalysis(): Promise<void> {
       console.log(`BotPrints: Analyzing u/${username}...`);
       const profile = await getUserProfile(username);
       await repairProfileUsername(username, profile);
+      const isGhostProfile = profile.userId === undefined && profile.username === '[redacted]';
       if (isSystemAccount(profile.userId, profile.username ?? null)) {
         console.warn('BotPrints: Skipping invalid profile in daily analysis', {
           usernameKey: username,
@@ -144,7 +145,10 @@ export async function runDailyAnalysis(): Promise<void> {
           storedUsername: profile.username,
         });
         await removeUserScore(username);
-        await unregisterUser(username);
+        if (isGhostProfile) {
+          await unregisterUser(username);
+          console.log('BotPrints: Removed ghost profile from Redis', { usernameKey: username });
+        }
         continue;
       }
       console.log(`BotPrints: u/${username} stats - Posts: ${profile.posts}, Comments: ${profile.comments}`);
