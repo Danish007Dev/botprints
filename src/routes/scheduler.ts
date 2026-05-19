@@ -138,16 +138,17 @@ export async function runDailyAnalysis(): Promise<void> {
       const profile = await getUserProfile(username);
       await repairProfileUsername(username, profile);
       const isGhostProfile = profile.userId === undefined && profile.username === '[redacted]';
-      if (isSystemAccount(profile.userId, profile.username ?? null)) {
+      const isBadKey = !isValidUsername(username); // If the Redis key itself is a system ID (like t2_)
+      if (isBadKey || isSystemAccount(profile.userId, profile.username ?? null)) {
         console.warn('BotPrints: Skipping invalid profile in daily analysis', {
           usernameKey: username,
           userId: profile.userId,
           storedUsername: profile.username,
         });
         await removeUserScore(username);
-        if (isGhostProfile) {
+        if (isGhostProfile || isBadKey) {
           await unregisterUser(username);
-          console.log('BotPrints: Removed ghost profile from Redis', { usernameKey: username });
+          console.log('BotPrints: Removed ghost/bad profile from Redis', { usernameKey: username });
         }
         continue;
       }

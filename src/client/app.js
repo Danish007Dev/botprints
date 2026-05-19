@@ -913,7 +913,7 @@ import { SIGNALS } from '../shared/signals.js';
     if (user.isCleared) {
       html += '<button class="btn-action action-undismiss" data-user="' + uname + '">↺ Re-Analyze</button>';
     } else {
-      var allowTierActions = !isInsufficient && elevationCount >= 4;
+      var allowTierActions = !isInsufficient;
 
       // AutoMod Rule Generator button for ring members
       if (user.suggestedRule && allowTierActions) {
