@@ -492,8 +492,7 @@ triggers.post('/on-comment-create', async (c) => {
       return c.json<TriggerResponse>({ status: 'success' }, 200);
     }
     const username = await resolveUsername(
-      input.comment?.author
-        || input.author?.name,
+      input.author?.name,
       authorId,
       'on-comment-create'
     );
@@ -603,8 +602,7 @@ triggers.post('/on-comment-update', async (c) => {
       return c.json<TriggerResponse>({ status: 'success' }, 200);
     }
     const username = await resolveUsername(
-      input.comment?.author
-        || input.author?.name,
+      input.author?.name,
       authorId,
       'on-comment-update'
     );
