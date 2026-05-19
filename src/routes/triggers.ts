@@ -36,6 +36,7 @@ import {
 import { computeRiskScore } from '../scoring/riskScore.js';
 import { detectBehavioralShift } from '../scoring/shiftDetector.js';
 import type { RaidParticipant } from '../types/index.js';
+import { SIGNALS } from '../shared/signals.js';
 
 export const triggers = new Hono();
 
@@ -82,7 +83,7 @@ triggers.post('/on-mod-mail', async (c) => {
     if (shift?.shifted) {
       annotation += `**Behavior Shift**: ⚠️ Magnitude ${shift.magnitude}x\n`;
     }
-    annotation += `**Signals**: Time (${breakdown.temporal}), Day (${breakdown.circadian}), Act (${breakdown.engagement})\n\n`;
+    annotation += `**Signals**: ${SIGNALS.TEMPORAL.full} (${breakdown.temporal}), ${SIGNALS.CIRCADIAN.full} (${breakdown.circadian}), ${SIGNALS.ENGAGEMENT.full} (${breakdown.engagement})\n\n`;
     annotation += `Review this user's appeal in the BotPrints Dashboard, or reply to them here.`;
     
     await reddit.modMail.reply({
@@ -108,12 +109,12 @@ triggers.post('/on-mod-mail', async (c) => {
 // ─── Helper: Get highest signal name from a score breakdown ─────────────────
 function getHighestSignal(breakdown: { temporal: number; circadian: number; engagement: number; editRate: number; burstSilence: number; voteCorrelation: number }): string {
   const signals = [
-    { name: 'Timing regularity', value: breakdown.temporal, max: 25 },
-    { name: 'Circadian pattern (24/7 activity)', value: breakdown.circadian, max: 20 },
-    { name: 'Engagement ratio', value: breakdown.engagement, max: 15 },
-    { name: 'Edit frequency', value: breakdown.editRate, max: 10 },
-    { name: 'Burst-silence pattern', value: breakdown.burstSilence, max: 15 },
-    { name: 'Vote correlation', value: breakdown.voteCorrelation, max: 15 },
+    { name: SIGNALS.TEMPORAL.full, value: breakdown.temporal, max: 25 },
+    { name: SIGNALS.CIRCADIAN.full, value: breakdown.circadian, max: 20 },
+    { name: SIGNALS.ENGAGEMENT.full, value: breakdown.engagement, max: 15 },
+    { name: SIGNALS.EDIT.full, value: breakdown.editRate, max: 10 },
+    { name: SIGNALS.BURST.full, value: breakdown.burstSilence, max: 15 },
+    { name: SIGNALS.VOTE.full, value: breakdown.voteCorrelation, max: 15 },
   ];
   // Sort by normalized value (value/max) descending
   signals.sort((a, b) => (b.value / b.max) - (a.value / a.max));

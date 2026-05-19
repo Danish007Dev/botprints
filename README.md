@@ -25,12 +25,12 @@ Built for the [Reddit Mod Tools Hackathon 2026](https://devpost.com/) on Devvit 
 ### 🧠 6-Signal Behavioral Scoring Engine
 | # | Signal | What It Detects | Weight |
 |---|--------|----------------|--------|
-| 1 | **Temporal Regularity** | Metronomic, cron-job posting intervals | 25 pts |
-| 2 | **Circadian Entropy** | 24/7 activity without a sleep cycle | 20 pts |
-| 3 | **Engagement Ratio** | Posts but never comments | 15 pts |
-| 4 | **Edit Absence** | AI-generated content is never edited | 10 pts |
-| 5 | **Burst-Silence** | Batch posting then going silent | 15 pts |
-| 6 | **Vote Correlation** | Suspiciously uniform upvote patterns (astroturfing) | 15 pts |
+| 1 | **Temporal regularity** | Metronomic, cron-job posting intervals | 25 pts |
+| 2 | **Circadian entropy** | 24/7 activity without a sleep cycle | 20 pts |
+| 3 | **Engagement ratio** | Posts but never comments | 15 pts |
+| 4 | **Edit absence** | AI-generated content is never edited | 10 pts |
+| 5 | **Burst-silence** | Batch posting then going silent | 15 pts |
+| 6 | **Vote correlation** | Suspiciously uniform upvote patterns (astroturfing) | 15 pts |
 
 **Total: 0–100 suspicion score.** Visualized on a 6-axis radar chart per user.
 

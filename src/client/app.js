@@ -1,3 +1,5 @@
+import { SIGNALS } from '../shared/signals.js';
+
 // ─── BotPrints Dashboard Client v2 ──────────────────────────────────────────
 // Completely defensive — every DOM access wrapped, every value defaulted.
 (function() {
@@ -553,7 +555,7 @@
     if (!b) b = {};
     var vals = [b.temporal || 0, b.circadian || 0, b.engagement || 0, b.editRate || 0, b.burstSilence || 0, b.voteCorrelation || 0];
     var maxes = [25, 20, 15, 10, 15, 15];
-    var labels = ['Time', 'Day', 'Act', 'Edit', 'Spk', 'Vote'];
+    var labels = [SIGNALS.TEMPORAL.short, SIGNALS.CIRCADIAN.short, SIGNALS.ENGAGEMENT.short, SIGNALS.EDIT.short, SIGNALS.BURST.short, SIGNALS.VOTE.short];
     var cx = 55, cy = 55, radius = 40, n = 6;
 
     var angles = [];
@@ -601,7 +603,7 @@
 
   function createCommunityRadarSVG(communityVals, referenceVals) {
     var maxes = [25, 20, 15, 10, 15, 15];
-    var labels = ['Time', 'Day', 'Act', 'Edit', 'Spk', 'Vote'];
+    var labels = [SIGNALS.TEMPORAL.short, SIGNALS.CIRCADIAN.short, SIGNALS.ENGAGEMENT.short, SIGNALS.EDIT.short, SIGNALS.BURST.short, SIGNALS.VOTE.short];
     var cx = 60, cy = 60, radius = 44, n = 6;
 
     var angles = [];
@@ -654,10 +656,10 @@
     return svg;
   }
 
-  function sigHTML(label, value, max) {
+  function sigHTML(label, value, max, fullName) {
     var c = sigColor(value, max);
     var w = max > 0 ? ((value / max) * 100) : 0;
-    return '<div class="signal">' +
+    return '<div class="signal" title="' + (fullName ? fullName : label) + '">' +
       '<div class="signal-value" style="color:' + c + '">' + value + '</div>' +
       '<div class="signal-label">' + label + '</div>' +
       '<div class="signal-bar"><div class="signal-bar-fill" style="width:' + w + '%;background:' + c + '"></div></div>' +
@@ -707,12 +709,12 @@
     var signalsHtml = isInsufficient
       ? buildDataProgress(activityMeta.activityCount, activityMeta.activityThreshold, activityMeta.signalThreshold)
       : '<div class="signals">' +
-          sigHTML('Timing', b.temporal || 0, 25) +
-          sigHTML('Daily Pattern', b.circadian || 0, 20) +
-          sigHTML('Activity', b.engagement || 0, 15) +
-          sigHTML('Edits', b.editRate || 0, 10) +
-          sigHTML('Spikes', b.burstSilence || 0, 15) +
-          sigHTML('Votes', b.voteCorrelation || 0, 15) +
+          sigHTML(SIGNALS.TEMPORAL.short, b.temporal || 0, 25, SIGNALS.TEMPORAL.full) +
+          sigHTML(SIGNALS.CIRCADIAN.short, b.circadian || 0, 20, SIGNALS.CIRCADIAN.full) +
+          sigHTML(SIGNALS.ENGAGEMENT.short, b.engagement || 0, 15, SIGNALS.ENGAGEMENT.full) +
+          sigHTML(SIGNALS.EDIT.short, b.editRate || 0, 10, SIGNALS.EDIT.full) +
+          sigHTML(SIGNALS.BURST.short, b.burstSilence || 0, 15, SIGNALS.BURST.full) +
+          sigHTML(SIGNALS.VOTE.short, b.voteCorrelation || 0, 15, SIGNALS.VOTE.full) +
         '</div>';
 
     var radarHtml = isInsufficient
