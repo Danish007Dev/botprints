@@ -3,6 +3,7 @@ export {
   getUserProfile,
   saveUserProfile,
   registerUser,
+  unregisterUser,
   getAllUsernames,
   getScoreHistory,
   appendScoreHistory,

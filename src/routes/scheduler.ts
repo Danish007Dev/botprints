@@ -13,6 +13,7 @@ import { reddit } from '@devvit/web/server';
 import {
   getUserProfile,
   getAllUsernames,
+  unregisterUser,
 
   appendScoreHistory,
   updateUserScore,
@@ -27,6 +28,7 @@ import {
   setAppealStatus,
   appendAuditEntry,
 } from '../storage/index.js';
+import { isSystemAccount, isValidUsername } from '../shared/accounts.js';
 import {
   computeRiskScore,
   MIN_ACTIVITY_FOR_SCORE,
@@ -45,12 +47,6 @@ import type { CommunityBaseline, ScoredUser, UserProfile } from '../types/index.
 import { pushSharedThreat } from '../storage/threats.js';
 
 export const scheduler = new Hono();
-
-const REDACTED_USERNAMES = new Set(['[redacted]', '[deleted]']);
-
-function isValidUsername(raw: string | undefined | null): raw is string {
-  return !!raw && !REDACTED_USERNAMES.has(raw);
-}
 
 async function repairProfileUsername(
   usernameKey: string,
@@ -141,6 +137,16 @@ export async function runDailyAnalysis(): Promise<void> {
       console.log(`BotPrints: Analyzing u/${username}...`);
       const profile = await getUserProfile(username);
       await repairProfileUsername(username, profile);
+      if (isSystemAccount(profile.userId, profile.username ?? null)) {
+        console.warn('BotPrints: Skipping invalid profile in daily analysis', {
+          usernameKey: username,
+          userId: profile.userId,
+          storedUsername: profile.username,
+        });
+        await removeUserScore(username);
+        await unregisterUser(username);
+        continue;
+      }
       console.log(`BotPrints: u/${username} stats - Posts: ${profile.posts}, Comments: ${profile.comments}`);
 
       const scoreBreakdown = computeRiskScore(profile, baseline);

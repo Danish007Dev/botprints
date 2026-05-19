@@ -36,6 +36,12 @@ export async function registerUser(username: string): Promise<void> {
   await redis.zAdd(ALL_USERS_KEY, { member: username, score: 0 });
 }
 
+export async function unregisterUser(username: string): Promise<void> {
+  await redis.del(KEY(username));
+  await redis.del(HISTORY_KEY(username));
+  await redis.zRem(ALL_USERS_KEY, [username]);
+}
+
 export async function getAllUsernames(): Promise<string[]> {
   try {
     // Retrieve all members from the sorted set (rank 0 to -1 = all)

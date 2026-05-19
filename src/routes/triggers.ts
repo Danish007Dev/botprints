@@ -6,13 +6,17 @@ import { Hono } from 'hono';
 import type {
   OnAppInstallRequest,
   OnPostCreateRequest,
+  OnPostDeleteRequest,
   OnPostUpdateRequest,
   OnCommentCreateRequest,
+  OnCommentDeleteRequest,
   OnCommentUpdateRequest,
+  OnModActionRequest,
   OnModMailRequest,
   TriggerResponse,
 } from '@devvit/web/shared';
 import { reddit } from '@devvit/web/server';
+import { isSystemAccount, isValidUsername } from '../shared/accounts.js';
 import {
   getUserProfile,
   saveUserProfile,
@@ -39,12 +43,6 @@ import type { RaidParticipant } from '../types/index.js';
 import { SIGNALS } from '../shared/signals.js';
 
 export const triggers = new Hono();
-
-const REDACTED_USERNAMES = new Set(['[redacted]', '[deleted]']);
-
-function isValidUsername(raw: string | undefined | null): raw is string {
-  return !!raw && !REDACTED_USERNAMES.has(raw);
-}
 
 async function resolveUsername(
   raw: string | undefined,
@@ -324,11 +322,19 @@ triggers.post('/on-post-create', async (c) => {
   try {
     const input = await c.req.json<OnPostCreateRequest>();
     const authorId = input.post?.authorId || input.author?.id;
+    if (isSystemAccount(authorId)) {
+      console.log(`BotPrints: Skipping system account post (${authorId})`);
+      return c.json<TriggerResponse>({ status: 'success' }, 200);
+    }
     const username = await resolveUsername(
       input.author?.name,
       authorId,
       'on-post-create'
     );
+    if (isSystemAccount(authorId, username)) {
+      console.warn('BotPrints: Skipping unresolved post author', { authorId });
+      return c.json<TriggerResponse>({ status: 'success' }, 200);
+    }
     if (!username || username === 'AutoModerator') {
       return c.json<TriggerResponse>({ status: 'success' }, 200);
     }
@@ -439,11 +445,19 @@ triggers.post('/on-post-update', async (c) => {
   try {
     const input = await c.req.json<OnPostUpdateRequest>();
     const authorId = input.post?.authorId || input.author?.id;
+    if (isSystemAccount(authorId)) {
+      console.log(`BotPrints: Skipping system account post update (${authorId})`);
+      return c.json<TriggerResponse>({ status: 'success' }, 200);
+    }
     const username = await resolveUsername(
       input.author?.name,
       authorId,
       'on-post-update'
     );
+    if (isSystemAccount(authorId, username)) {
+      console.warn('BotPrints: Skipping unresolved post update author', { authorId });
+      return c.json<TriggerResponse>({ status: 'success' }, 200);
+    }
     if (!username || username === 'AutoModerator') {
       return c.json<TriggerResponse>({ status: 'success' }, 200);
     }
@@ -473,12 +487,20 @@ triggers.post('/on-comment-create', async (c) => {
   try {
     const input = await c.req.json<OnCommentCreateRequest>();
     const authorId = input.author?.id;
+    if (isSystemAccount(authorId)) {
+      console.log(`BotPrints: Skipping system account comment (${authorId})`);
+      return c.json<TriggerResponse>({ status: 'success' }, 200);
+    }
     const username = await resolveUsername(
       input.comment?.author
         || input.author?.name,
       authorId,
       'on-comment-create'
     );
+    if (isSystemAccount(authorId, username)) {
+      console.warn('BotPrints: Skipping unresolved comment author', { authorId });
+      return c.json<TriggerResponse>({ status: 'success' }, 200);
+    }
     if (!username || username === 'AutoModerator') {
       return c.json<TriggerResponse>({ status: 'success' }, 200);
     }
@@ -539,11 +561,19 @@ triggers.post('/on-post-update', async (c) => {
   try {
     const input = await c.req.json<OnPostUpdateRequest>();
     const authorId = input.post?.authorId || input.author?.id;
+    if (isSystemAccount(authorId)) {
+      console.log(`BotPrints: Skipping system account post edit (${authorId})`);
+      return c.json<TriggerResponse>({ status: 'success' }, 200);
+    }
     const username = await resolveUsername(
       input.author?.name,
       authorId,
       'on-post-update-edit'
     );
+    if (isSystemAccount(authorId, username)) {
+      console.warn('BotPrints: Skipping unresolved post edit author', { authorId });
+      return c.json<TriggerResponse>({ status: 'success' }, 200);
+    }
     if (!username) {
       return c.json<TriggerResponse>({ status: 'success' }, 200);
     }
@@ -568,12 +598,20 @@ triggers.post('/on-comment-update', async (c) => {
   try {
     const input = await c.req.json<OnCommentUpdateRequest>();
     const authorId = input.author?.id;
+    if (isSystemAccount(authorId)) {
+      console.log(`BotPrints: Skipping system account comment update (${authorId})`);
+      return c.json<TriggerResponse>({ status: 'success' }, 200);
+    }
     const username = await resolveUsername(
       input.comment?.author
         || input.author?.name,
       authorId,
       'on-comment-update'
     );
+    if (isSystemAccount(authorId, username)) {
+      console.warn('BotPrints: Skipping unresolved comment update author', { authorId });
+      return c.json<TriggerResponse>({ status: 'success' }, 200);
+    }
     if (!username) {
       return c.json<TriggerResponse>({ status: 'success' }, 200);
     }
@@ -588,6 +626,90 @@ triggers.post('/on-comment-update', async (c) => {
     return c.json<TriggerResponse>({ status: 'success' }, 200);
   } catch (err) {
     console.error('BotPrints: Error in onCommentUpdate trigger:', err);
+    return c.json<TriggerResponse>({ status: 'success' }, 200);
+  }
+});
+
+// ─── onPostDelete ──────────────────────────────────────────────────────────
+triggers.post('/on-post-delete', async (c) => {
+  try {
+    const input = await c.req.json<OnPostDeleteRequest>();
+    const authorId = input.author?.id;
+    if (isSystemAccount(authorId)) {
+      console.log(`BotPrints: Skipping system account post delete (${authorId})`);
+      return c.json<TriggerResponse>({ status: 'success' }, 200);
+    }
+    const username = await resolveUsername(
+      input.author?.name,
+      authorId,
+      'on-post-delete'
+    );
+    if (isSystemAccount(authorId, username)) {
+      console.warn('BotPrints: Skipping unresolved post delete author', { authorId });
+      return c.json<TriggerResponse>({ status: 'success' }, 200);
+    }
+    if (username === 'AutoModerator') {
+      return c.json<TriggerResponse>({ status: 'success' }, 200);
+    }
+    return c.json<TriggerResponse>({ status: 'success' }, 200);
+  } catch (err) {
+    console.error('BotPrints: Error in onPostDelete trigger:', err);
+    return c.json<TriggerResponse>({ status: 'success' }, 200);
+  }
+});
+
+// ─── onCommentDelete ───────────────────────────────────────────────────────
+triggers.post('/on-comment-delete', async (c) => {
+  try {
+    const input = await c.req.json<OnCommentDeleteRequest>();
+    const authorId = input.author?.id;
+    if (isSystemAccount(authorId)) {
+      console.log(`BotPrints: Skipping system account comment delete (${authorId})`);
+      return c.json<TriggerResponse>({ status: 'success' }, 200);
+    }
+    const username = await resolveUsername(
+      input.author?.name,
+      authorId,
+      'on-comment-delete'
+    );
+    if (isSystemAccount(authorId, username)) {
+      console.warn('BotPrints: Skipping unresolved comment delete author', { authorId });
+      return c.json<TriggerResponse>({ status: 'success' }, 200);
+    }
+    if (username === 'AutoModerator') {
+      return c.json<TriggerResponse>({ status: 'success' }, 200);
+    }
+    return c.json<TriggerResponse>({ status: 'success' }, 200);
+  } catch (err) {
+    console.error('BotPrints: Error in onCommentDelete trigger:', err);
+    return c.json<TriggerResponse>({ status: 'success' }, 200);
+  }
+});
+
+// ─── onModAction ───────────────────────────────────────────────────────────
+triggers.post('/on-mod-action', async (c) => {
+  try {
+    const input = await c.req.json<OnModActionRequest>();
+    const moderatorId = input.moderator?.id;
+    if (isSystemAccount(moderatorId)) {
+      console.log(`BotPrints: Skipping system account mod action (${moderatorId})`);
+      return c.json<TriggerResponse>({ status: 'success' }, 200);
+    }
+    const moderator = await resolveUsername(
+      input.moderator?.name,
+      moderatorId,
+      'on-mod-action'
+    );
+    if (isSystemAccount(moderatorId, moderator)) {
+      console.warn('BotPrints: Skipping unresolved mod action author', { moderatorId });
+      return c.json<TriggerResponse>({ status: 'success' }, 200);
+    }
+    if (moderator === 'AutoModerator') {
+      return c.json<TriggerResponse>({ status: 'success' }, 200);
+    }
+    return c.json<TriggerResponse>({ status: 'success' }, 200);
+  } catch (err) {
+    console.error('BotPrints: Error in onModAction trigger:', err);
     return c.json<TriggerResponse>({ status: 'success' }, 200);
   }
 });
