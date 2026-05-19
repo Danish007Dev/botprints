@@ -364,6 +364,7 @@ api.get('/dashboard', async (c) => {
     const isDemoLoaded = allUsernames.includes('AutoShill_9000');
 
     return c.json({
+      subredditName: subreddit.name,
       users: scoredUsers,
       monitoredUsers,
       clearedUsers,

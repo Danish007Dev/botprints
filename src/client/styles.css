@@ -869,3 +869,23 @@ body {
   color: #00bcd4;
   border: 1px solid rgba(0, 188, 212, 0.3);
 }
+
+.user-link {
+  color: var(--color-text-info, var(--accent-cyan));
+  text-decoration: none;
+}
+.user-link:hover {
+  text-decoration: underline;
+}
+.search-link {
+  color: var(--text-secondary);
+  text-decoration: none;
+  display: inline-block;
+  padding: 2px;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+}
+.search-link:hover {
+  color: var(--text-primary);
+  background: rgba(255,255,255,0.1);
+}
