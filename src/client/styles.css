@@ -502,6 +502,44 @@ body {
 .signal-bar { height: 2px; background: rgba(255,255,255,0.04); border-radius: 2px; margin-top: 3px; overflow: hidden; }
 .signal-bar-fill { height: 100%; border-radius: 2px; transition: width 0.6s ease; }
 
+.signal { position: relative; overflow: visible; }
+.signal-tooltip {
+  display: none;
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 8px;
+  width: max-content;
+  max-width: 220px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  padding: 8px 10px;
+  z-index: 100;
+  text-align: left;
+  white-space: normal;
+  color: var(--text-primary);
+  line-height: 1.4;
+  box-shadow: none;
+}
+.signal-tooltip strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--accent-cyan);
+}
+.signal:hover .signal-tooltip,
+.signal:focus .signal-tooltip {
+  display: block;
+}
+.signal.tooltip-flip .signal-tooltip {
+  bottom: auto;
+  top: 100%;
+  margin-bottom: 0;
+  margin-top: 8px;
+}
+
 .data-progress {
   margin-top: 8px;
   padding: 8px 10px;

@@ -656,13 +656,15 @@ import { SIGNALS } from '../shared/signals.js';
     return svg;
   }
 
-  function sigHTML(label, value, max, fullName) {
+  function sigHTML(signalConfig, value, max) {
     var c = sigColor(value, max);
     var w = max > 0 ? ((value / max) * 100) : 0;
-    return '<div class="signal" title="' + (fullName ? fullName : label) + '">' +
+    var tooltipText = signalConfig.description + ' Score: ' + value + '/' + max + '.';
+    return '<div class="signal" tabindex="0">' +
       '<div class="signal-value" style="color:' + c + '">' + value + '</div>' +
-      '<div class="signal-label">' + label + '</div>' +
+      '<div class="signal-label">' + signalConfig.short + '</div>' +
       '<div class="signal-bar"><div class="signal-bar-fill" style="width:' + w + '%;background:' + c + '"></div></div>' +
+      '<div class="signal-tooltip"><strong>' + signalConfig.full + '</strong><br/>' + tooltipText + '</div>' +
     '</div>';
   }
 
@@ -709,12 +711,12 @@ import { SIGNALS } from '../shared/signals.js';
     var signalsHtml = isInsufficient
       ? buildDataProgress(activityMeta.activityCount, activityMeta.activityThreshold, activityMeta.signalThreshold)
       : '<div class="signals">' +
-          sigHTML(SIGNALS.TEMPORAL.short, b.temporal || 0, 25, SIGNALS.TEMPORAL.full) +
-          sigHTML(SIGNALS.CIRCADIAN.short, b.circadian || 0, 20, SIGNALS.CIRCADIAN.full) +
-          sigHTML(SIGNALS.ENGAGEMENT.short, b.engagement || 0, 15, SIGNALS.ENGAGEMENT.full) +
-          sigHTML(SIGNALS.EDIT.short, b.editRate || 0, 10, SIGNALS.EDIT.full) +
-          sigHTML(SIGNALS.BURST.short, b.burstSilence || 0, 15, SIGNALS.BURST.full) +
-          sigHTML(SIGNALS.VOTE.short, b.voteCorrelation || 0, 15, SIGNALS.VOTE.full) +
+          sigHTML(SIGNALS.TEMPORAL, b.temporal || 0, 25) +
+          sigHTML(SIGNALS.CIRCADIAN, b.circadian || 0, 20) +
+          sigHTML(SIGNALS.ENGAGEMENT, b.engagement || 0, 15) +
+          sigHTML(SIGNALS.EDIT, b.editRate || 0, 10) +
+          sigHTML(SIGNALS.BURST, b.burstSilence || 0, 15) +
+          sigHTML(SIGNALS.VOTE, b.voteCorrelation || 0, 15) +
         '</div>';
 
     var radarHtml = isInsufficient
@@ -925,6 +927,22 @@ import { SIGNALS } from '../shared/signals.js';
     }
     html += '</div></div></div>';
     card.innerHTML = html;
+
+    // Attach tooltip flip logic dynamically
+    var sigNodes = card.querySelectorAll('.signal');
+    for (var i = 0; i < sigNodes.length; i++) {
+      sigNodes[i].addEventListener('mouseenter', function(e) {
+        if (this.getBoundingClientRect().top < 120) {
+          this.classList.add('tooltip-flip');
+        } else {
+          this.classList.remove('tooltip-flip');
+        }
+      });
+      // Handle mobile tap dismissal
+      sigNodes[i].addEventListener('click', function(e) {
+        e.stopPropagation(); // prevent card expansion toggle
+      });
+    }
 
     if (missingUsername) {
       return card;
