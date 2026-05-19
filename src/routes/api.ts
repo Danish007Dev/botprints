@@ -217,8 +217,12 @@ api.get('/dashboard', async (c) => {
         const group = coordMemberMap.get(username);
         if (group) {
           entry.coordGroup = group.id;
-          entry.suggestedRule = group.suggestedRule;
-          entry.ruleReason = group.ruleReason;
+          if (group.suggestedRule !== undefined) {
+            entry.suggestedRule = group.suggestedRule;
+          }
+          if (group.ruleReason !== undefined) {
+            entry.ruleReason = group.ruleReason;
+          }
         }
 
         scoredUsers.push(entry);
@@ -277,8 +281,12 @@ api.get('/dashboard', async (c) => {
 
         if (group) {
           entry.coordGroup = group.id;
-          entry.suggestedRule = group.suggestedRule;
-          entry.ruleReason = group.ruleReason;
+          if (group.suggestedRule !== undefined) {
+            entry.suggestedRule = group.suggestedRule;
+          }
+          if (group.ruleReason !== undefined) {
+            entry.ruleReason = group.ruleReason;
+          }
         }
 
         scoredUsers.push(entry);

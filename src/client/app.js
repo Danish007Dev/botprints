@@ -678,12 +678,18 @@
     var b = user.breakdown || {};
     var activityMeta = getActivityMeta(user, profile);
     var elevationCount = typeof b.elevationCount === 'number' ? b.elevationCount : 0;
-    var uname = user.username || 'unknown';
+    var missingUsername = !user.username || user.username === '[redacted]';
+    if (missingUsername) {
+      console.warn('BotPrints: Missing username in user card', user);
+    }
+    var uname = missingUsername ? 'Unknown user' : user.username;
     var isAmplified = !!(user.isNewAccount && user.amplifiedScore);
     var scoreValue = isInsufficient ? '—' : (user.amplifiedScore || user.score || 0);
     var scoreLabel = isInsufficient ? 'Insufficient Data' : (isAmplified ? 'Amplified' : 'Suspicion');
     var scoreLabelStyle = isAmplified ? ' style="color: #ffa502;"' : '';
     var scoreMeta = isInsufficient ? 'Collecting data' : (elevationCount + ' of 6 signals elevated');
+    var displayName = missingUsername ? 'Unknown user' : ('u/' + uname);
+    var usernameClass = missingUsername ? ' username-missing' : '';
 
     var badges = '';
     if (user.banEvasionMatch || (profile.banEvasionMatch)) {
@@ -848,7 +854,7 @@
         '<div class="user-info">' +
           '<div class="avatar">' + uname[0].toUpperCase() + '</div>' +
           '<div>' +
-            '<div class="username">u/' + uname + '</div>' +
+            '<div class="username' + usernameClass + '">' + displayName + '</div>' +
             '<div class="user-meta">' + (profile.posts || 0) + ' posts, ' + (profile.comments || 0) + ' comments, ' + (profile.edits || 0) + ' edits, active ' + days + ' days</div>' +
             '<div class="user-badges">' + badges + '</div>' +
           '</div>' +
@@ -918,6 +924,10 @@
     html += '</div></div></div>';
     card.innerHTML = html;
 
+    if (missingUsername) {
+      return card;
+    }
+
     // Attach event listeners safely to comply with CSP
     var watchBtn = card.querySelector('.action-watch');
     if (watchBtn) watchBtn.addEventListener('click', function(ev) {
@@ -979,7 +989,13 @@
     card.className = 'user-card risk-insufficient monitor-card';
 
     var profile = user.profile || {};
-    var uname = user.username || 'unknown';
+    var missingUsername = !user.username || user.username === '[redacted]';
+    if (missingUsername) {
+      console.warn('BotPrints: Missing username in monitored card', user);
+    }
+    var uname = missingUsername ? 'Unknown user' : user.username;
+    var displayName = missingUsername ? 'Unknown user' : ('u/' + uname);
+    var usernameClass = missingUsername ? ' username-missing' : '';
     var days = typeof user.accountAgeDays === 'number'
       ? user.accountAgeDays
       : Math.max(1, Math.round((Date.now() - (profile.firstSeen || Date.now())) / 86400000));
@@ -994,7 +1010,7 @@
         '<div class="user-info">' +
           '<div class="avatar">' + uname[0].toUpperCase() + '</div>' +
           '<div>' +
-            '<div class="username">u/' + uname + '</div>' +
+            '<div class="username' + usernameClass + '">' + displayName + '</div>' +
             '<div class="user-meta">' + (profile.posts || 0) + ' posts, ' + (profile.comments || 0) + ' comments, active ' + days + ' days</div>' +
             '<div class="user-badges">' + badges + '</div>' +
           '</div>' +

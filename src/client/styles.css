@@ -482,6 +482,7 @@ body {
 .avatar { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
   font-size: 14px; font-weight: 800; background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue)); color: #fff; flex-shrink: 0; }
 .username { font-weight: 700; font-size: 13px; }
+.username-missing { color: var(--accent-amber); }
 .user-meta { font-size: 10px; color: var(--text-secondary); margin-top: 1px; }
 .user-badges { display: flex; gap: 4px; margin-top: 3px; }
 

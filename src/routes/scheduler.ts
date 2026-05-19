@@ -17,6 +17,7 @@ import {
   appendScoreHistory,
   updateUserScore,
   removeUserScore,
+  saveUserProfile,
   getCommunityBaseline,
   saveCommunityBaseline,
   isUserDismissed,
@@ -40,10 +41,54 @@ import {
 } from '../signals/index.js';
 import { detectCoordinatedGroups } from '../scoring/coordinatedDetector.js';
 import { DEFAULT_BASELINE } from '../types/index.js';
-import type { CommunityBaseline, ScoredUser } from '../types/index.js';
+import type { CommunityBaseline, ScoredUser, UserProfile } from '../types/index.js';
 import { pushSharedThreat } from '../storage/threats.js';
 
 export const scheduler = new Hono();
+
+async function repairProfileUsername(
+  usernameKey: string,
+  profile: UserProfile
+): Promise<void> {
+  if (!usernameKey || usernameKey === '[redacted]') {
+    console.error('BotPrints: Invalid username key for repair', { usernameKey });
+    return;
+  }
+  if (profile.username && profile.username !== '[redacted]') return;
+
+  let resolved = usernameKey;
+  const redditAny = reddit as any;
+
+  if (typeof redditAny.getUserByName === 'function') {
+    try {
+      const user = await redditAny.getUserByName({ username: usernameKey });
+      resolved = user?.username || user?.name || resolved;
+    } catch {
+      try {
+        const user = await redditAny.getUserByName(usernameKey);
+        resolved = user?.username || user?.name || resolved;
+      } catch {
+        // fall through
+      }
+    }
+  } else if (typeof redditAny.getUserByUsername === 'function') {
+    try {
+      const user = await redditAny.getUserByUsername(usernameKey);
+      resolved = user?.username || user?.name || resolved;
+    } catch {
+      // fall through
+    }
+  }
+
+  if (!resolved || resolved === '[redacted]') {
+    console.error('BotPrints: Could not repair missing username', { usernameKey });
+    return;
+  }
+
+  profile.username = resolved;
+  await saveUserProfile(usernameKey, profile);
+  console.log(`BotPrints: Repaired missing username for key ${usernameKey}`);
+}
 
 scheduler.post('/daily-analysis', async (c) => {
   await c.req.json<TaskRequest>();
@@ -86,6 +131,7 @@ export async function runDailyAnalysis(): Promise<void> {
 
       console.log(`BotPrints: Analyzing u/${username}...`);
       const profile = await getUserProfile(username);
+      await repairProfileUsername(username, profile);
       console.log(`BotPrints: u/${username} stats - Posts: ${profile.posts}, Comments: ${profile.comments}`);
 
       const scoreBreakdown = computeRiskScore(profile, baseline);

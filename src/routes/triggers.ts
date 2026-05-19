@@ -39,6 +39,14 @@ import type { RaidParticipant } from '../types/index.js';
 
 export const triggers = new Hono();
 
+function extractUsername(raw: string | undefined, context: string): string | null {
+  if (!raw || raw === '[redacted]') {
+    console.error(`BotPrints: Missing username in ${context}`, { raw });
+    return null;
+  }
+  return raw;
+}
+
 // ─── onAppInstall ───────────────────────────────────────────────────────────
 triggers.post('/on-app-install', async (c) => {
   const input = await c.req.json<OnAppInstallRequest>();
@@ -291,12 +299,16 @@ async function sendRaidAlert(
 triggers.post('/on-post-create', async (c) => {
   try {
     const input = await c.req.json<OnPostCreateRequest>();
-    const username = input.author?.name;
+    const username = extractUsername(
+      input.author?.name,
+      'on-post-create'
+    );
     if (!username || username === 'AutoModerator') {
       return c.json<TriggerResponse>({ status: 'success' }, 200);
     }
 
     const profile = await getUserProfile(username);
+    profile.username = username;
     
     // 🌐 Cross-subreddit threat intel check on first activity
     if (profile.posts === 0 && profile.comments === 0 && !profile.sharedThreat) {
@@ -399,7 +411,10 @@ triggers.post('/on-post-create', async (c) => {
 triggers.post('/on-post-update', async (c) => {
   try {
     const input = await c.req.json<OnPostUpdateRequest>();
-    const username = input.author?.name;
+    const username = extractUsername(
+      input.author?.name,
+      'on-post-update'
+    );
     if (!username || username === 'AutoModerator') {
       return c.json<TriggerResponse>({ status: 'success' }, 200);
     }
@@ -407,6 +422,7 @@ triggers.post('/on-post-update', async (c) => {
     const score = input.post?.score;
     if (typeof score === 'number' && score > 0) {
       const profile = await getUserProfile(username);
+      profile.username = username;
       if (!profile.voteScoreDeltas) {
         profile.voteScoreDeltas = [];
       }
@@ -426,12 +442,17 @@ triggers.post('/on-post-update', async (c) => {
 triggers.post('/on-comment-create', async (c) => {
   try {
     const input = await c.req.json<OnCommentCreateRequest>();
-    const username = input.author?.name;
+    const username = extractUsername(
+      input.comment?.author
+        || input.author?.name,
+      'on-comment-create'
+    );
     if (!username || username === 'AutoModerator') {
       return c.json<TriggerResponse>({ status: 'success' }, 200);
     }
 
     const profile = await getUserProfile(username);
+    profile.username = username;
     
     // 🌐 Cross-subreddit threat intel check on first activity
     if (profile.posts === 0 && profile.comments === 0 && !profile.sharedThreat) {
@@ -484,12 +505,16 @@ triggers.post('/on-comment-create', async (c) => {
 triggers.post('/on-post-update', async (c) => {
   try {
     const input = await c.req.json<OnPostUpdateRequest>();
-    const username = input.author?.name;
+    const username = extractUsername(
+      input.author?.name,
+      'on-post-update-edit'
+    );
     if (!username) {
       return c.json<TriggerResponse>({ status: 'success' }, 200);
     }
 
     const profile = await getUserProfile(username);
+    profile.username = username;
     profile.edits += 1;
 
     await saveUserProfile(username, profile);
@@ -506,12 +531,17 @@ triggers.post('/on-post-update', async (c) => {
 triggers.post('/on-comment-update', async (c) => {
   try {
     const input = await c.req.json<OnCommentUpdateRequest>();
-    const username = input.author?.name;
+    const username = extractUsername(
+      input.comment?.author
+        || input.author?.name,
+      'on-comment-update'
+    );
     if (!username) {
       return c.json<TriggerResponse>({ status: 'success' }, 200);
     }
 
     const profile = await getUserProfile(username);
+    profile.username = username;
     profile.edits += 1;
 
     await saveUserProfile(username, profile);
