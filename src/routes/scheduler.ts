@@ -46,42 +46,51 @@ import { pushSharedThreat } from '../storage/threats.js';
 
 export const scheduler = new Hono();
 
+const REDACTED_USERNAMES = new Set(['[redacted]', '[deleted]']);
+
+function isValidUsername(raw: string | undefined | null): raw is string {
+  return !!raw && !REDACTED_USERNAMES.has(raw);
+}
+
 async function repairProfileUsername(
   usernameKey: string,
   profile: UserProfile
 ): Promise<void> {
-  if (!usernameKey || usernameKey === '[redacted]') {
+  if (!usernameKey) {
     console.error('BotPrints: Invalid username key for repair', { usernameKey });
     return;
   }
-  if (profile.username && profile.username !== '[redacted]') return;
+  if (isValidUsername(profile.username)) return;
 
-  let resolved = usernameKey;
-  const redditAny = reddit as any;
+  let resolved: string | undefined;
 
-  if (typeof redditAny.getUserByName === 'function') {
+  if (profile.userId) {
     try {
-      const user = await redditAny.getUserByName({ username: usernameKey });
-      resolved = user?.username || user?.name || resolved;
-    } catch {
-      try {
-        const user = await redditAny.getUserByName(usernameKey);
-        resolved = user?.username || user?.name || resolved;
-      } catch {
-        // fall through
-      }
+      const user = await reddit.getUserById(profile.userId as `t2_${string}`);
+      resolved = user?.username;
+    } catch (err) {
+      console.warn('BotPrints: Could not repair username by id', {
+        usernameKey,
+        userId: profile.userId,
+        err,
+      });
     }
-  } else if (typeof redditAny.getUserByUsername === 'function') {
+  }
+
+  if (!isValidUsername(resolved) && isValidUsername(usernameKey)) {
     try {
-      const user = await redditAny.getUserByUsername(usernameKey);
-      resolved = user?.username || user?.name || resolved;
+      const user = await reddit.getUserByUsername(usernameKey);
+      resolved = user?.username;
     } catch {
       // fall through
     }
   }
 
-  if (!resolved || resolved === '[redacted]') {
-    console.error('BotPrints: Could not repair missing username', { usernameKey });
+  if (!isValidUsername(resolved)) {
+    console.error('BotPrints: Could not repair missing username', {
+      usernameKey,
+      userId: profile.userId,
+    });
     return;
   }
 

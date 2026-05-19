@@ -23,6 +23,7 @@ export interface BanEvasionMatch {
 
 export interface UserProfile {
   username: string;
+  userId?: string;
   posts: number;
   comments: number;
   edits: number;

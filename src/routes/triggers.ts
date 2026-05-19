@@ -40,12 +40,35 @@ import { SIGNALS } from '../shared/signals.js';
 
 export const triggers = new Hono();
 
-function extractUsername(raw: string | undefined, context: string): string | null {
-  if (!raw || raw === '[redacted]') {
-    console.error(`BotPrints: Missing username in ${context}`, { raw });
-    return null;
+const REDACTED_USERNAMES = new Set(['[redacted]', '[deleted]']);
+
+function isValidUsername(raw: string | undefined | null): raw is string {
+  return !!raw && !REDACTED_USERNAMES.has(raw);
+}
+
+async function resolveUsername(
+  raw: string | undefined,
+  userId: string | undefined,
+  context: string
+): Promise<string | null> {
+  if (isValidUsername(raw)) return raw;
+
+  if (userId) {
+    try {
+      const user = await reddit.getUserById(userId as `t2_${string}`);
+      const resolved = user?.username;
+      if (isValidUsername(resolved)) return resolved;
+    } catch (err) {
+      console.warn('BotPrints: Could not resolve username by id', {
+        context,
+        userId,
+        err,
+      });
+    }
   }
-  return raw;
+
+  console.error(`BotPrints: Missing username in ${context}`, { raw, userId });
+  return null;
 }
 
 // ─── onAppInstall ───────────────────────────────────────────────────────────
@@ -300,8 +323,10 @@ async function sendRaidAlert(
 triggers.post('/on-post-create', async (c) => {
   try {
     const input = await c.req.json<OnPostCreateRequest>();
-    const username = extractUsername(
+    const authorId = input.post?.authorId || input.author?.id;
+    const username = await resolveUsername(
       input.author?.name,
+      authorId,
       'on-post-create'
     );
     if (!username || username === 'AutoModerator') {
@@ -310,6 +335,7 @@ triggers.post('/on-post-create', async (c) => {
 
     const profile = await getUserProfile(username);
     profile.username = username;
+    if (authorId) profile.userId = authorId;
     
     // 🌐 Cross-subreddit threat intel check on first activity
     if (profile.posts === 0 && profile.comments === 0 && !profile.sharedThreat) {
@@ -412,8 +438,10 @@ triggers.post('/on-post-create', async (c) => {
 triggers.post('/on-post-update', async (c) => {
   try {
     const input = await c.req.json<OnPostUpdateRequest>();
-    const username = extractUsername(
+    const authorId = input.post?.authorId || input.author?.id;
+    const username = await resolveUsername(
       input.author?.name,
+      authorId,
       'on-post-update'
     );
     if (!username || username === 'AutoModerator') {
@@ -424,6 +452,7 @@ triggers.post('/on-post-update', async (c) => {
     if (typeof score === 'number' && score > 0) {
       const profile = await getUserProfile(username);
       profile.username = username;
+      if (authorId) profile.userId = authorId;
       if (!profile.voteScoreDeltas) {
         profile.voteScoreDeltas = [];
       }
@@ -443,9 +472,11 @@ triggers.post('/on-post-update', async (c) => {
 triggers.post('/on-comment-create', async (c) => {
   try {
     const input = await c.req.json<OnCommentCreateRequest>();
-    const username = extractUsername(
+    const authorId = input.author?.id;
+    const username = await resolveUsername(
       input.comment?.author
         || input.author?.name,
+      authorId,
       'on-comment-create'
     );
     if (!username || username === 'AutoModerator') {
@@ -454,6 +485,7 @@ triggers.post('/on-comment-create', async (c) => {
 
     const profile = await getUserProfile(username);
     profile.username = username;
+    if (authorId) profile.userId = authorId;
     
     // 🌐 Cross-subreddit threat intel check on first activity
     if (profile.posts === 0 && profile.comments === 0 && !profile.sharedThreat) {
@@ -506,8 +538,10 @@ triggers.post('/on-comment-create', async (c) => {
 triggers.post('/on-post-update', async (c) => {
   try {
     const input = await c.req.json<OnPostUpdateRequest>();
-    const username = extractUsername(
+    const authorId = input.post?.authorId || input.author?.id;
+    const username = await resolveUsername(
       input.author?.name,
+      authorId,
       'on-post-update-edit'
     );
     if (!username) {
@@ -516,6 +550,7 @@ triggers.post('/on-post-update', async (c) => {
 
     const profile = await getUserProfile(username);
     profile.username = username;
+    if (authorId) profile.userId = authorId;
     profile.edits += 1;
 
     await saveUserProfile(username, profile);
@@ -532,9 +567,11 @@ triggers.post('/on-post-update', async (c) => {
 triggers.post('/on-comment-update', async (c) => {
   try {
     const input = await c.req.json<OnCommentUpdateRequest>();
-    const username = extractUsername(
+    const authorId = input.author?.id;
+    const username = await resolveUsername(
       input.comment?.author
         || input.author?.name,
+      authorId,
       'on-comment-update'
     );
     if (!username) {
@@ -543,6 +580,7 @@ triggers.post('/on-comment-update', async (c) => {
 
     const profile = await getUserProfile(username);
     profile.username = username;
+    if (authorId) profile.userId = authorId;
     profile.edits += 1;
 
     await saveUserProfile(username, profile);
