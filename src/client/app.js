@@ -556,12 +556,12 @@ import { SIGNALS } from '../shared/signals.js';
     var vals = [b.temporal || 0, b.circadian || 0, b.engagement || 0, b.editRate || 0, b.burstSilence || 0, b.voteCorrelation || 0];
     var maxes = [25, 20, 15, 10, 15, 15];
     var labels = [SIGNALS.TEMPORAL.short, SIGNALS.CIRCADIAN.short, SIGNALS.ENGAGEMENT.short, SIGNALS.EDIT.short, SIGNALS.BURST.short, SIGNALS.VOTE.short];
-    var cx = 55, cy = 55, radius = 40, n = 6;
+    var cx = 65, cy = 65, radius = 38, n = 6;
 
     var angles = [];
     for (var i = 0; i < n; i++) angles.push((Math.PI * 2 * i) / n - Math.PI / 2);
 
-    var svg = '<svg viewBox="0 0 110 110" width="100" height="100">';
+    var svg = '<svg viewBox="0 0 130 130" width="100%" height="100%" style="max-width: 110px;">';
 
     // Grid circles
     var gridLevels = [0.25, 0.5, 0.75, 1];
@@ -604,12 +604,12 @@ import { SIGNALS } from '../shared/signals.js';
   function createCommunityRadarSVG(communityVals, referenceVals) {
     var maxes = [25, 20, 15, 10, 15, 15];
     var labels = [SIGNALS.TEMPORAL.short, SIGNALS.CIRCADIAN.short, SIGNALS.ENGAGEMENT.short, SIGNALS.EDIT.short, SIGNALS.BURST.short, SIGNALS.VOTE.short];
-    var cx = 60, cy = 60, radius = 44, n = 6;
+    var cx = 70, cy = 70, radius = 42, n = 6;
 
     var angles = [];
     for (var i = 0; i < n; i++) angles.push((Math.PI * 2 * i) / n - Math.PI / 2);
 
-    var svg = '<svg viewBox="0 0 120 120" width="120" height="120">';
+    var svg = '<svg viewBox="0 0 140 140" width="100%" height="100%" style="max-width: 120px;">';
 
     // Grid circles
     var gridLevels = [0.25, 0.5, 0.75, 1];
