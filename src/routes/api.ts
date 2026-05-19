@@ -18,6 +18,8 @@ import {
   addToWatchlist,
   isUserWatched,
   addToFilterList,
+  removeFromFilterList,
+  isUserFiltered,
   setAppealStatus,
   getAppealStatus,
   appendAuditEntry,
@@ -173,6 +175,7 @@ api.get('/dashboard', async (c) => {
         const history = await getScoreHistory(username);
         const shift = detectBehavioralShift(history);
         const isWatched = await isUserWatched(username);
+        const isFiltered = await isUserFiltered(username);
         const activityMeta = activityCache.get(username) || {
           activityCount: (profile.posts || 0) + (profile.comments || 0),
           accountAgeDays: Math.max(
@@ -195,6 +198,7 @@ api.get('/dashboard', async (c) => {
           shift,
           profile,
           isWatched,
+          isFiltered,
           insufficientData: !breakdown.hasEnoughData,
           activityCount: activityMeta.activityCount,
           activityThreshold: MIN_ACTIVITY_FOR_SCORE,
@@ -245,6 +249,7 @@ api.get('/dashboard', async (c) => {
         const history = await getScoreHistory(username);
         const shift = detectBehavioralShift(history);
         const isWatched = await isUserWatched(username);
+        const isFiltered = await isUserFiltered(username);
         const activityMeta = activityCache.get(username) || {
           activityCount: (profile.posts || 0) + (profile.comments || 0),
           accountAgeDays: Math.max(
@@ -261,6 +266,7 @@ api.get('/dashboard', async (c) => {
           shift,
           profile,
           isWatched,
+          isFiltered,
           insufficientData: !breakdown.hasEnoughData,
           activityCount: activityMeta.activityCount,
           activityThreshold: MIN_ACTIVITY_FOR_SCORE,
@@ -302,6 +308,7 @@ api.get('/dashboard', async (c) => {
         const history = await getScoreHistory(username);
         const shift = detectBehavioralShift(history);
         const isWatched = await isUserWatched(username);
+        const isFiltered = await isUserFiltered(username);
         const activityMeta = activityCache.get(username) || {
           activityCount: (profile.posts || 0) + (profile.comments || 0),
           accountAgeDays: Math.max(
@@ -316,6 +323,7 @@ api.get('/dashboard', async (c) => {
           shift,
           profile,
           isWatched,
+          isFiltered,
           isCleared: true,
           insufficientData: !breakdown.hasEnoughData,
           activityCount: activityMeta.activityCount,
@@ -526,6 +534,30 @@ api.post('/filter/:username', async (c) => {
     return c.json({ status: 'ok' });
   } catch (err) {
     console.error(`BotPrints API: Failed to filter u/${username}:`, err);
+    return c.json({ status: 'error', message: String(err) });
+  }
+});
+
+// ─── Unfilter User ───────────────────────────────────────────────────────────
+api.post('/unfilter/:username', async (c) => {
+  const username = c.req.param('username');
+  console.log(`BotPrints API: /unfilter/${username} called`);
+  try {
+    const currentUser = await reddit.getCurrentUser();
+    await removeFromFilterList(username);
+    
+    await appendAuditEntry({
+      timestamp: Date.now(),
+      action: 'filter',
+      username,
+      performedBy: currentUser?.username || 'unknown',
+      details: `Removed u/${username} from filter list.`,
+    });
+
+    console.log(`BotPrints API: Removed u/${username} from filter list`);
+    return c.json({ status: 'ok' });
+  } catch (err) {
+    console.error(`BotPrints API: Failed to unfilter u/${username}:`, err);
     return c.json({ status: 'error', message: String(err) });
   }
 });

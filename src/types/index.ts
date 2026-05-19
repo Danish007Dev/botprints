@@ -117,6 +117,7 @@ export interface ScoredUser {
   ruleReason?: string;
   banEvasionMatch?: BanEvasionMatch;
   isWatched?: boolean;
+  isFiltered?: boolean;
   isCleared?: boolean;
 }
 

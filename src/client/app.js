@@ -752,23 +752,47 @@ import { SIGNALS } from '../shared/signals.js';
 
     // ─── Tier 1: Filter → Modqueue ──────────────────────────────────────
     function onFilterUser(u, btn) {
-      btn.textContent = 'Filtering...';
-      btn.disabled = true;
-      fetch('/api/filter/' + encodeURIComponent(u), { method: 'POST' })
-        .then(function(res) { return res.json(); })
-        .then(function(data) {
-          if (data.status === 'ok') {
-            btn.textContent = '🔽 Filtered';
-            showToast('u/' + u + ' content will now be routed to modqueue for review.', 'success');
-          } else {
+      if (user.isFiltered) {
+        btn.textContent = 'Unfiltering...';
+        btn.disabled = true;
+        fetch('/api/unfilter/' + encodeURIComponent(u), { method: 'POST' })
+          .then(function(res) { return res.json(); })
+          .then(function(data) {
+            if (data.status === 'ok') {
+              btn.textContent = '🔽 Filter';
+              btn.disabled = false;
+              user.isFiltered = false;
+              showToast('u/' + u + ' removed from filter list.', 'success');
+            } else {
+              btn.textContent = 'Error'; btn.disabled = false;
+              showToast('Failed to unfilter u/' + u + ': ' + data.message, 'error');
+            }
+          })
+          .catch(function() {
             btn.textContent = 'Error'; btn.disabled = false;
-            showToast('Failed to filter u/' + u + ': ' + data.message, 'error');
-          }
-        })
-        .catch(function() {
-          btn.textContent = 'Error'; btn.disabled = false;
-          showToast('Failed to filter u/' + u + ' (Network error)', 'error');
-        });
+            showToast('Failed to unfilter u/' + u + ' (Network error)', 'error');
+          });
+      } else {
+        btn.textContent = 'Filtering...';
+        btn.disabled = true;
+        fetch('/api/filter/' + encodeURIComponent(u), { method: 'POST' })
+          .then(function(res) { return res.json(); })
+          .then(function(data) {
+            if (data.status === 'ok') {
+              btn.textContent = '🔽 Filtered';
+              btn.disabled = false;
+              user.isFiltered = true;
+              showToast('u/' + u + ' content will now be routed to modqueue for review.', 'success');
+            } else {
+              btn.textContent = 'Error'; btn.disabled = false;
+              showToast('Failed to filter u/' + u + ': ' + data.message, 'error');
+            }
+          })
+          .catch(function() {
+            btn.textContent = 'Error'; btn.disabled = false;
+            showToast('Failed to filter u/' + u + ' (Network error)', 'error');
+          });
+      }
     }
 
     // ─── Tier 2: Remove + Appeal ────────────────────────────────────────
@@ -922,7 +946,7 @@ import { SIGNALS } from '../shared/signals.js';
       
       // 3-Tier Enforcement buttons
       html += '<button class="btn-action action-watch" data-user="' + uname + '">' + (user.isWatched ? '👁 Watched' : '👁 Watch') + '</button>' +
-        '<button class="btn-action action-filter" data-user="' + uname + '">🔽 Filter</button>';
+        '<button class="btn-action action-filter" data-user="' + uname + '">' + (user.isFiltered ? '🔽 Filtered' : '🔽 Filter') + '</button>';
 
       if (allowTierActions) {
         html += '<button class="btn-action action-remove-appeal" data-user="' + uname + '">⚠ Remove + Appeal</button>' +
