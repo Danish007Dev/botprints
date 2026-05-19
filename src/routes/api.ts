@@ -37,14 +37,72 @@ import {
   getDashboardMetrics,
   storeBanFingerprint,
 } from '../storage/index.js';
-import { computeRiskScore } from '../scoring/riskScore.js';
+import {
+  computeRiskScore,
+  MIN_ACTIVITY_FOR_SCORE,
+  MIN_ACTIVITY_FOR_SIGNALS,
+  MIN_BASELINE_SAMPLE,
+  MIN_BASELINE_DAYS,
+} from '../scoring/riskScore.js';
 import { detectBehavioralShift } from '../scoring/shiftDetector.js';
 import { detectCoordinatedGroups } from '../scoring/coordinatedDetector.js';
 import { DEMO_PROFILES } from '../data/demoData.js';
 import { DEFAULT_BASELINE } from '../types/index.js';
-import type { ScoredUser, SubredditSummary, RaidSettings, AutoActionSettings } from '../types/index.js';
+import type {
+  ScoredUser,
+  SubredditSummary,
+  RaidSettings,
+  AutoActionSettings,
+  MonitoredUser,
+  UserProfile,
+  CommunityBaseline,
+} from '../types/index.js';
 
 export const api = new Hono();
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function getCalibrationStatus(baseline: CommunityBaseline): {
+  ready: boolean;
+  sampleSize: number;
+  daysSinceStart: number;
+  minSampleSize: number;
+  minDays: number;
+  reason: 'sample' | 'time' | 'missing' | 'ready';
+} {
+  const sampleSize = baseline.signalSampleSize ?? 0;
+  const startedAt = baseline.signalBaselineStartedAt ?? 0;
+  const daysSinceStart = startedAt > 0
+    ? Math.floor((Date.now() - startedAt) / DAY_MS)
+    : 0;
+  const hasStats = !!(baseline.signalMeans && baseline.signalStdDevs);
+
+  if (hasStats && sampleSize >= MIN_BASELINE_SAMPLE && daysSinceStart >= MIN_BASELINE_DAYS) {
+    return {
+      ready: true,
+      sampleSize,
+      daysSinceStart,
+      minSampleSize: MIN_BASELINE_SAMPLE,
+      minDays: MIN_BASELINE_DAYS,
+      reason: 'ready',
+    };
+  }
+
+  const reason = sampleSize < MIN_BASELINE_SAMPLE
+    ? 'sample'
+    : daysSinceStart < MIN_BASELINE_DAYS
+      ? 'time'
+      : 'missing';
+
+  return {
+    ready: false,
+    sampleSize,
+    daysSinceStart,
+    minSampleSize: MIN_BASELINE_SAMPLE,
+    minDays: MIN_BASELINE_DAYS,
+    reason,
+  };
+}
 
 api.get('/health', (c) => c.json({ status: 'ok', app: 'botprints', version: '0.2.0' }));
 
@@ -70,72 +128,220 @@ api.get('/dashboard', async (c) => {
     // ──────────────────────────────────────────────────────────────────────
 
     const topUsers = await getTopRiskyUsers(20);
-    const baseline = await getCommunityBaseline();
+    const baseline = await getCommunityBaseline(subreddit.id);
+    const calibration = getCalibrationStatus(baseline);
     const allUsernames = await getAllUsernames();
     const settings = await getAutoActionSettings();
     const scoredUsers: ScoredUser[] = [];
+    const monitoredUsers: MonitoredUser[] = [];
+
+    const clearedUsernames = await getClearedUsernames();
+    const clearedSet = new Set(clearedUsernames);
+    const scoredUsernames = new Set<string>();
+
+    const profileCache = new Map<string, UserProfile>();
+    const activityCache = new Map<string, { activityCount: number; accountAgeDays: number }>();
+    const ringCandidates: { username: string; profile: UserProfile; score: number }[] = [];
+
+    for (const username of allUsernames) {
+      try {
+        const profile = await getUserProfile(username);
+        profileCache.set(username, profile);
+        const activityCount = (profile.posts || 0) + (profile.comments || 0);
+        const accountAgeDays = Math.max(
+          0,
+          Math.round((Date.now() - profile.firstSeen) / (1000 * 60 * 60 * 24))
+        );
+        activityCache.set(username, { activityCount, accountAgeDays });
+        ringCandidates.push({ username, profile, score: 0 });
+      } catch { /* skip */ }
+    }
+
+    // Coordinated group detection (independent of score volume)
+    const coordGroups = detectCoordinatedGroups(ringCandidates, 0);
+    const coordMemberMap = new Map<string, (typeof coordGroups)[number]>();
+    for (const group of coordGroups) {
+      for (const member of group.members) {
+        coordMemberMap.set(member, group);
+      }
+    }
 
     for (const { username } of topUsers) {
       try {
-        const profile = await getUserProfile(username);
+        const profile = profileCache.get(username) || (await getUserProfile(username));
         const breakdown = computeRiskScore(profile, baseline);
         const history = await getScoreHistory(username);
         const shift = detectBehavioralShift(history);
         const isWatched = await isUserWatched(username);
-        const entry: ScoredUser = { username, score: breakdown.total, breakdown, shift, profile, isWatched };
+        const activityMeta = activityCache.get(username) || {
+          activityCount: (profile.posts || 0) + (profile.comments || 0),
+          accountAgeDays: Math.max(
+            0,
+            Math.round((Date.now() - profile.firstSeen) / (1000 * 60 * 60 * 24))
+          ),
+        };
+        const isNewAccount = activityMeta.accountAgeDays < settings.newAccountThresholdDays;
+        const inRing = coordMemberMap.has(username);
+        const hasBanEvasion = !!profile.banEvasionMatch;
 
-        // New Account Amplifier
-        if (settings.newAccountAmplifier) {
-          const accountAgeDays = (Date.now() - profile.firstSeen) / (1000 * 60 * 60 * 24);
-          if (accountAgeDays < settings.newAccountThresholdDays) {
-            entry.isNewAccount = true;
-            entry.amplifiedScore = Math.min(100, Math.round(breakdown.total * settings.newAccountMultiplier));
-          }
+        if (!breakdown.hasEnoughData && !inRing && !hasBanEvasion) {
+          continue;
+        }
+
+        const entry: ScoredUser = {
+          username,
+          score: breakdown.total,
+          breakdown,
+          shift,
+          profile,
+          isWatched,
+          insufficientData: !breakdown.hasEnoughData,
+          activityCount: activityMeta.activityCount,
+          activityThreshold: MIN_ACTIVITY_FOR_SCORE,
+          accountAgeDays: activityMeta.accountAgeDays,
+          isNewAccount,
+        };
+
+        // New Account Amplifier (only after minimum data threshold)
+        if (settings.newAccountAmplifier && breakdown.hasEnoughData && isNewAccount) {
+          entry.amplifiedScore = Math.min(
+            100,
+            Math.round(breakdown.total * settings.newAccountMultiplier)
+          );
         }
 
         if (profile.banEvasionMatch) {
           entry.banEvasionMatch = profile.banEvasionMatch;
         }
+
+        const group = coordMemberMap.get(username);
+        if (group) {
+          entry.coordGroup = group.id;
+          entry.suggestedRule = group.suggestedRule;
+          entry.ruleReason = group.ruleReason;
+        }
+
         scoredUsers.push(entry);
+        scoredUsernames.add(username);
       } catch { /* skip */ }
     }
 
-    const clearedUsernames = await getClearedUsernames();
-    const clearedUsers: ScoredUser[] = [];
-    for (const username of clearedUsernames) {
+    // Add ring or ban-evasion exceptions even if below threshold
+    for (const username of allUsernames) {
+      if (scoredUsernames.has(username)) continue;
+      const profile = profileCache.get(username);
+      if (!profile) continue;
+
+      const group = coordMemberMap.get(username);
+      const hasBanEvasion = !!profile.banEvasionMatch;
+      if (!group && !hasBanEvasion) continue;
+
       try {
-        const profile = await getUserProfile(username);
         const breakdown = computeRiskScore(profile, baseline);
         const history = await getScoreHistory(username);
         const shift = detectBehavioralShift(history);
         const isWatched = await isUserWatched(username);
-        clearedUsers.push({ username, score: breakdown.total, breakdown, shift, profile, isWatched, isCleared: true });
+        const activityMeta = activityCache.get(username) || {
+          activityCount: (profile.posts || 0) + (profile.comments || 0),
+          accountAgeDays: Math.max(
+            0,
+            Math.round((Date.now() - profile.firstSeen) / (1000 * 60 * 60 * 24))
+          ),
+        };
+        const isNewAccount = activityMeta.accountAgeDays < settings.newAccountThresholdDays;
+
+        const entry: ScoredUser = {
+          username,
+          score: breakdown.total,
+          breakdown,
+          shift,
+          profile,
+          isWatched,
+          insufficientData: !breakdown.hasEnoughData,
+          activityCount: activityMeta.activityCount,
+          activityThreshold: MIN_ACTIVITY_FOR_SCORE,
+          accountAgeDays: activityMeta.accountAgeDays,
+          isNewAccount,
+        };
+
+        if (settings.newAccountAmplifier && breakdown.hasEnoughData && isNewAccount) {
+          entry.amplifiedScore = Math.min(
+            100,
+            Math.round(breakdown.total * settings.newAccountMultiplier)
+          );
+        }
+
+        if (profile.banEvasionMatch) {
+          entry.banEvasionMatch = profile.banEvasionMatch;
+        }
+
+        if (group) {
+          entry.coordGroup = group.id;
+          entry.suggestedRule = group.suggestedRule;
+          entry.ruleReason = group.ruleReason;
+        }
+
+        scoredUsers.push(entry);
+        scoredUsernames.add(username);
       } catch { /* skip */ }
     }
 
-    // Coordinated group detection
-    const coordGroups = detectCoordinatedGroups(scoredUsers);
-    // Tag users with their group ID and rule suggestions
-    for (const group of coordGroups) {
-      for (const member of group.members) {
-        const user = scoredUsers.find(u => u.username === member);
-        if (user) {
-          user.coordGroup = group.id;
-          if (group.suggestedRule !== undefined) {
-            user.suggestedRule = group.suggestedRule;
-          }
-          if (group.ruleReason !== undefined) {
-            user.ruleReason = group.ruleReason;
-          }
-        }
-      }
+    const clearedUsers: ScoredUser[] = [];
+    for (const username of clearedUsernames) {
+      try {
+        const profile = profileCache.get(username) || (await getUserProfile(username));
+        const breakdown = computeRiskScore(profile, baseline);
+        const history = await getScoreHistory(username);
+        const shift = detectBehavioralShift(history);
+        const isWatched = await isUserWatched(username);
+        const activityMeta = activityCache.get(username) || {
+          activityCount: (profile.posts || 0) + (profile.comments || 0),
+          accountAgeDays: Math.max(
+            0,
+            Math.round((Date.now() - profile.firstSeen) / (1000 * 60 * 60 * 24))
+          ),
+        };
+        clearedUsers.push({
+          username,
+          score: breakdown.total,
+          breakdown,
+          shift,
+          profile,
+          isWatched,
+          isCleared: true,
+          insufficientData: !breakdown.hasEnoughData,
+          activityCount: activityMeta.activityCount,
+          activityThreshold: MIN_ACTIVITY_FOR_SCORE,
+          accountAgeDays: activityMeta.accountAgeDays,
+        });
+      } catch { /* skip */ }
     }
 
-    // Subreddit summary
-    const highRiskCount = scoredUsers.filter(u => u.score >= 70).length;
-    const shiftedCount = scoredUsers.filter(u => u.shift?.shifted).length;
-    const avgRisk = scoredUsers.length > 0
-      ? scoredUsers.reduce((s, u) => s + u.score, 0) / scoredUsers.length
+    // Build monitored list (below threshold, not in exceptions or cleared)
+    for (const username of allUsernames) {
+      if (scoredUsernames.has(username)) continue;
+      if (clearedSet.has(username)) continue;
+      const profile = profileCache.get(username);
+      const activityMeta = activityCache.get(username);
+      if (!profile || !activityMeta) continue;
+      if (activityMeta.activityCount >= MIN_ACTIVITY_FOR_SCORE) continue;
+
+      monitoredUsers.push({
+        username,
+        profile,
+        activityCount: activityMeta.activityCount,
+        activityThreshold: MIN_ACTIVITY_FOR_SCORE,
+        accountAgeDays: activityMeta.accountAgeDays,
+        isNewAccount: activityMeta.accountAgeDays < settings.newAccountThresholdDays,
+      });
+    }
+
+    // Subreddit summary (exclude insufficient-data users)
+    const scoredForSummary = scoredUsers.filter(u => !u.insufficientData);
+    const highRiskCount = scoredForSummary.filter(u => u.score >= 70).length;
+    const shiftedCount = scoredForSummary.filter(u => u.shift?.shifted).length;
+    const avgRisk = scoredForSummary.length > 0
+      ? scoredForSummary.reduce((s, u) => s + u.score, 0) / scoredForSummary.length
       : 0;
 
     const summary: SubredditSummary = {
@@ -149,11 +355,33 @@ api.get('/dashboard', async (c) => {
 
     const isDemoLoaded = allUsernames.includes('AutoShill_9000');
 
-    return c.json({ users: scoredUsers, clearedUsers, coordGroups, summary, baseline, isDemoLoaded });
+    return c.json({
+      users: scoredUsers,
+      monitoredUsers,
+      clearedUsers,
+      coordGroups,
+      summary,
+      baseline,
+      calibration,
+      thresholds: {
+        minActivityForScore: MIN_ACTIVITY_FOR_SCORE,
+        minActivityForSignals: MIN_ACTIVITY_FOR_SIGNALS,
+      },
+      isDemoLoaded,
+    });
   } catch (err) {
     console.error('BotPrints API error:', err);
     return c.json({
-      users: [], coordGroups: [], baseline: DEFAULT_BASELINE,
+      users: [],
+      monitoredUsers: [],
+      clearedUsers: [],
+      coordGroups: [],
+      baseline: DEFAULT_BASELINE,
+      calibration: getCalibrationStatus(DEFAULT_BASELINE),
+      thresholds: {
+        minActivityForScore: MIN_ACTIVITY_FOR_SCORE,
+        minActivityForSignals: MIN_ACTIVITY_FOR_SIGNALS,
+      },
       summary: { totalTracked: 0, highRiskCount: 0, shiftedCount: 0, coordGroupCount: 0, healthScore: 100, lastScan: 0 },
     });
   }
@@ -162,7 +390,8 @@ api.get('/dashboard', async (c) => {
 // ─── Load Demo Data ─────────────────────────────────────────────────────────
 api.post('/load-demo', async (c) => {
   try {
-    const baseline = await getCommunityBaseline();
+    const subreddit = await reddit.getCurrentSubreddit();
+    const baseline = await getCommunityBaseline(subreddit.id);
     for (const profile of DEMO_PROFILES) {
       await saveUserProfile(profile.username, profile);
       await registerUser(profile.username);
@@ -174,12 +403,14 @@ api.post('/load-demo', async (c) => {
       await incrementMetric('rings_detected', 1);
       
       const breakdown = computeRiskScore(profile, baseline);
-      await updateUserScore(profile.username, breakdown.total);
-      const fakeHistory = Array.from({ length: 7 }, () =>
-        Math.max(0, breakdown.total + Math.floor(Math.random() * 20 - 10))
-      );
-      for (const s of fakeHistory) {
-        await appendScoreHistory(profile.username, s);
+      if (breakdown.hasEnoughData) {
+        await updateUserScore(profile.username, breakdown.total);
+        const fakeHistory = Array.from({ length: 7 }, () =>
+          Math.max(0, breakdown.total + Math.floor(Math.random() * 20 - 10))
+        );
+        for (const s of fakeHistory) {
+          await appendScoreHistory(profile.username, s);
+        }
       }
     }
     return c.json({ status: 'ok', loaded: DEMO_PROFILES.length });
@@ -230,7 +461,8 @@ api.post('/undismiss/:username', async (c) => {
     
     // Immediately calculate risk score so they reappear
     const profile = await getUserProfile(username);
-    const baseline = await getCommunityBaseline();
+    const subreddit = await reddit.getCurrentSubreddit();
+    const baseline = await getCommunityBaseline(subreddit.id);
     const breakdown = computeRiskScore(profile, baseline);
     if (breakdown.hasEnoughData) {
       await updateUserScore(username, breakdown.total);
@@ -501,7 +733,7 @@ api.post('/appeals/:username/escalate', async (c) => {
     // Store behavioral fingerprint for ban evasion detection
     try {
       const profile = await getUserProfile(username);
-      const baseline = await getCommunityBaseline();
+      const baseline = await getCommunityBaseline(subreddit.id);
       const breakdown = computeRiskScore(profile, baseline);
       if (breakdown.hasEnoughData) {
         await storeBanFingerprint(username, breakdown);
@@ -581,7 +813,7 @@ api.post('/ban-report/:username', async (c) => {
     // Store behavioral fingerprint for ban evasion detection
     try {
       const profile = await getUserProfile(username);
-      const baseline = await getCommunityBaseline();
+      const baseline = await getCommunityBaseline(subreddit.id);
       const breakdown = computeRiskScore(profile, baseline);
       if (breakdown.hasEnoughData) {
         await storeBanFingerprint(username, breakdown);
@@ -621,8 +853,9 @@ api.post('/ban-report/:username', async (c) => {
 api.get('/user/:username', async (c) => {
   const username = c.req.param('username');
   try {
+    const subreddit = await reddit.getCurrentSubreddit();
     const profile = await getUserProfile(username);
-    const baseline = await getCommunityBaseline();
+    const baseline = await getCommunityBaseline(subreddit.id);
     const breakdown = computeRiskScore(profile, baseline);
     const history = await getScoreHistory(username);
     const shift = detectBehavioralShift(history);

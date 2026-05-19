@@ -87,6 +87,8 @@
       </div>
     </section>
 
+    <div class="calibration-note" id="calibration-note" style="display:none"></div>
+
     <!-- Coordinated Ring Alert -->
     <section class="ring-alert" id="ring-alert" style="display:none"></section>
 
@@ -124,16 +126,30 @@
         <div class="settings-section">
           <h3>Score Thresholds</h3>
           <div class="setting-row">
-            <label>Low Risk Cutoff <span class="setting-val" id="val-low">60</span></label>
+            <label>Low Suspicion Cutoff <span class="setting-val" id="val-low">60</span></label>
             <input type="range" id="set-low" min="30" max="80" value="60" class="slider">
           </div>
           <div class="setting-row">
-            <label>Medium Risk Cutoff <span class="setting-val" id="val-med">80</span></label>
+            <label>Medium Suspicion Cutoff <span class="setting-val" id="val-med">80</span></label>
             <input type="range" id="set-med" min="50" max="95" value="80" class="slider">
           </div>
           <div class="setting-row">
-            <label>High Risk Cutoff <span class="setting-val" id="val-high">90</span></label>
+            <label>High Suspicion Cutoff <span class="setting-val" id="val-high">90</span></label>
             <input type="range" id="set-high" min="70" max="100" value="90" class="slider">
+          </div>
+        </div>
+
+        <!-- Community Profile -->
+        <div class="settings-section" id="community-profile">
+          <h3>Community Profile</h3>
+          <p class="community-profile-desc">Your community's typical posting pattern compared to the global default.</p>
+          <div class="community-profile-note" id="community-profile-note"></div>
+          <div class="community-profile-card" id="community-profile-card" style="display:none">
+            <div id="community-radar"></div>
+            <div class="community-legend">
+              <div><span class="legend-swatch legend-community"></span> Community average</div>
+              <div><span class="legend-swatch legend-global"></span> Global default</div>
+            </div>
           </div>
         </div>
 
@@ -141,7 +157,7 @@
         <div class="settings-section">
           <h3>Auto-Actions Per Tier</h3>
           <div class="setting-row">
-            <label>Low Risk Action (score ≥ <span class="dynamic-low">60</span>)</label>
+            <label>Low Suspicion Action (score ≥ <span class="dynamic-low">60</span>)</label>
             <select id="set-low-action" class="setting-select">
               <option value="nothing">Do Nothing</option>
               <option value="modqueue">Send to Modqueue</option>
@@ -150,7 +166,7 @@
             </select>
           </div>
           <div class="setting-row">
-            <label>Medium Risk Action (score ≥ <span class="dynamic-med">80</span>)</label>
+            <label>Medium Suspicion Action (score ≥ <span class="dynamic-med">80</span>)</label>
             <select id="set-med-action" class="setting-select">
               <option value="nothing">Do Nothing</option>
               <option value="modqueue">Send to Modqueue</option>
@@ -159,7 +175,7 @@
             </select>
           </div>
           <div class="setting-row">
-            <label>High Risk Action (score ≥ <span class="dynamic-high">90</span>)</label>
+            <label>High Suspicion Action (score ≥ <span class="dynamic-high">90</span>)</label>
             <select id="set-high-action" class="setting-select">
               <option value="nothing">Do Nothing</option>
               <option value="modqueue">Send to Modqueue</option>
@@ -205,7 +221,7 @@
               <input type="checkbox" id="set-new-acct" class="toggle-input">
               <label for="set-new-acct" class="toggle-label"></label>
             </div>
-            <div class="setting-hint">Accounts under the threshold age get their risk score multiplied before threshold comparison.</div>
+            <div class="setting-hint">Accounts under the threshold age get their suspicion score multiplied before threshold comparison.</div>
           </div>
           <div class="setting-row">
             <label>Account Age Threshold (days) <span class="setting-val" id="val-acct-days">30</span></label>
@@ -314,7 +330,7 @@
           </ol>
           <hr style="border-color: var(--border); margin: 15px 0;">
 
-          <p><strong>Risk Score (0-100):</strong> Composite of 6 behavioral signals. Higher = more bot-like behavior.</p>
+          <p><strong>Suspicion Score (0-100):</strong> Composite of 6 behavioral signals. Higher = more anomalous behavior.</p>
 
           <p><strong>4-Tier Enforcement:</strong><br/>
              • <strong>👁 Watch (Tier 0):</strong> Silent monitoring — get modmail alerts on new activity.<br/>

@@ -16,15 +16,22 @@ import {
 
   appendScoreHistory,
   updateUserScore,
+  removeUserScore,
   getCommunityBaseline,
   saveCommunityBaseline,
   isUserDismissed,
+  getClearedUsernames,
   getAllPendingAppeals,
   getAutoActionSettings,
   setAppealStatus,
   appendAuditEntry,
 } from '../storage/index.js';
-import { computeRiskScore } from '../scoring/riskScore.js';
+import {
+  computeRiskScore,
+  MIN_ACTIVITY_FOR_SCORE,
+  MIN_BASELINE_DAYS,
+  MIN_BASELINE_SAMPLE,
+} from '../scoring/riskScore.js';
 import {
   computeInterArrivalCV,
   computeCircadianEntropy,
@@ -54,14 +61,14 @@ scheduler.post('/daily-analysis', async (c) => {
 export async function runDailyAnalysis(): Promise<void> {
   const startTime = Date.now();
   const usernames = await getAllUsernames();
+  const subreddit = await reddit.getCurrentSubreddit();
 
   if (usernames.length === 0) {
     console.log('BotPrints: No users to analyze yet');
     return;
   }
 
-  const baseline = await getCommunityBaseline();
-  const minPosts = 1; // Temporarily reduced to 1 for easier playtesting!
+  const baseline = await getCommunityBaseline(subreddit.id);
 
   // Score all users
   let analyzed = 0;
@@ -81,10 +88,11 @@ export async function runDailyAnalysis(): Promise<void> {
       const profile = await getUserProfile(username);
       console.log(`BotPrints: u/${username} stats - Posts: ${profile.posts}, Comments: ${profile.comments}`);
 
-      const scoreBreakdown = computeRiskScore(profile, baseline, minPosts);
+      const scoreBreakdown = computeRiskScore(profile, baseline);
 
       if (!scoreBreakdown.hasEnoughData) {
-        console.log(`BotPrints: Skipped u/${username} - Not enough data (requires at least ${minPosts} posts)`);
+        await removeUserScore(username);
+        console.log(`BotPrints: Skipped u/${username} - Not enough data for scoring`);
         continue;
       }
 
@@ -104,7 +112,21 @@ export async function runDailyAnalysis(): Promise<void> {
   }
 
   // Recompute community baseline from all profiles
-  await recomputeCommunityBaseline(usernames);
+  const baselineStartedAt = baseline.signalBaselineStartedAt ?? 0;
+  const baselineAgeDays = baselineStartedAt
+    ? (Date.now() - baselineStartedAt) / (24 * 60 * 60 * 1000)
+    : 0;
+  const baselineSampleSize = baseline.signalSampleSize ?? 0;
+  const baselineMature =
+    baselineStartedAt > 0 &&
+    baselineAgeDays >= MIN_BASELINE_DAYS &&
+    baselineSampleSize >= MIN_BASELINE_SAMPLE;
+  const now = new Date();
+  const isSundayMidnight = now.getUTCDay() === 0 && now.getUTCHours() === 0;
+
+  if (!baselineMature || isSundayMidnight) {
+    await recomputeCommunityBaseline(usernames, baseline, subreddit.id);
+  }
 
   // Re-run coordinated group detection on top users
   const topUsers = await getAllUsernames();
@@ -114,7 +136,7 @@ export async function runDailyAnalysis(): Promise<void> {
   for (const username of topUsers) {
     try {
       const profile = await getUserProfile(username);
-      const breakdown = computeRiskScore(profile, baseline, minPosts);
+      const breakdown = computeRiskScore(profile, baseline);
       scoredUsers.push({ 
         username, 
         score: breakdown.total, 
@@ -125,12 +147,11 @@ export async function runDailyAnalysis(): Promise<void> {
     } catch { /* skip */ }
   }
 
-  const coordGroups = detectCoordinatedGroups(scoredUsers);
-  const currentSubreddit = await reddit.getCurrentSubreddit();
+  const coordGroups = detectCoordinatedGroups(scoredUsers, 0);
   
   for (const group of coordGroups) {
     if (group.members.length >= 3 && group.avgCorrelation > 0.9) {
-      await pushSharedThreat(currentSubreddit.name, group.members, group.avgCorrelation);
+      await pushSharedThreat(subreddit.name, group.members, group.avgCorrelation);
       console.log(`BotPrints: Confirmed ring pushed to shared threat layer. Group ${group.id}`);
     }
   }
@@ -146,7 +167,9 @@ export async function runDailyAnalysis(): Promise<void> {
 
 // Helper: recompute baseline averages from all user profiles
 async function recomputeCommunityBaseline(
-  usernames: string[]
+  usernames: string[],
+  currentBaseline: CommunityBaseline,
+  subredditId: string
 ): Promise<void> {
   const values = {
     cv: [] as number[],
@@ -154,11 +177,28 @@ async function recomputeCommunityBaseline(
     ratio: [] as number[],
     editRate: [] as number[],
   };
+  const signals = {
+    temporal: [] as number[],
+    circadian: [] as number[],
+    engagement: [] as number[],
+    editRate: [] as number[],
+    burstSilence: [] as number[],
+    voteCorrelation: [] as number[],
+  };
+
+  const pendingAppeals = await getAllPendingAppeals();
+  const pendingSet = new Set(pendingAppeals.map((a) => a.username));
+  const clearedSet = new Set(await getClearedUsernames());
+  let sampleCount = 0;
 
   for (const username of usernames) {
+    if (pendingSet.has(username) || clearedSet.has(username)) continue;
     try {
       const profile = await getUserProfile(username);
-      if (profile.posts < 5) continue;
+      const activityCount = (profile.posts || 0) + (profile.comments || 0);
+      if (activityCount < MIN_ACTIVITY_FOR_SCORE) continue;
+
+      sampleCount++;
 
       const cv = computeInterArrivalCV(profile.postTimestamps);
       const entropy = computeCircadianEntropy(profile.hourBuckets);
@@ -173,6 +213,14 @@ async function recomputeCommunityBaseline(
       if (entropy !== -1) values.entropy.push(entropy);
       if (ratio !== -1) values.ratio.push(ratio);
       if (editRateVal !== -1) values.editRate.push(editRateVal);
+
+      const breakdown = computeRiskScore(profile, currentBaseline);
+      signals.temporal.push(breakdown.temporal);
+      signals.circadian.push(breakdown.circadian);
+      signals.engagement.push(breakdown.engagement);
+      signals.editRate.push(breakdown.editRate);
+      signals.burstSilence.push(breakdown.burstSilence);
+      signals.voteCorrelation.push(breakdown.voteCorrelation);
     } catch (err) {
       console.log(`BotPrints: Error computing baseline for ${username}:`, err);
     }
@@ -182,6 +230,37 @@ async function recomputeCommunityBaseline(
     arr.length > 0
       ? arr.reduce((a, b) => a + b, 0) / arr.length
       : fallback;
+
+  const mean = (arr: number[]): number =>
+    arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+
+  const stdDev = (arr: number[], meanVal: number): number => {
+    if (arr.length <= 1) return 0;
+    const variance = arr.reduce((s, v) => s + (v - meanVal) ** 2, 0) / arr.length;
+    return Math.sqrt(variance);
+  };
+
+  const signalMeans = {
+    temporal: mean(signals.temporal),
+    circadian: mean(signals.circadian),
+    engagement: mean(signals.engagement),
+    editRate: mean(signals.editRate),
+    burstSilence: mean(signals.burstSilence),
+    voteCorrelation: mean(signals.voteCorrelation),
+  };
+
+  const signalStdDevs = {
+    temporal: stdDev(signals.temporal, signalMeans.temporal),
+    circadian: stdDev(signals.circadian, signalMeans.circadian),
+    engagement: stdDev(signals.engagement, signalMeans.engagement),
+    editRate: stdDev(signals.editRate, signalMeans.editRate),
+    burstSilence: stdDev(signals.burstSilence, signalMeans.burstSilence),
+    voteCorrelation: stdDev(signals.voteCorrelation, signalMeans.voteCorrelation),
+  };
+
+  const now = Date.now();
+  const baselineStartedAt =
+    currentBaseline.signalBaselineStartedAt || (sampleCount > 0 ? now : 0);
 
   const newBaseline: CommunityBaseline = {
     avgInterArrivalCV: avg(values.cv, DEFAULT_BASELINE.avgInterArrivalCV),
@@ -194,11 +273,16 @@ async function recomputeCommunityBaseline(
       DEFAULT_BASELINE.avgPostCommentRatio
     ),
     avgEditRate: avg(values.editRate, DEFAULT_BASELINE.avgEditRate),
-    sampleSize: usernames.length,
-    lastComputed: Date.now(),
+    sampleSize: sampleCount,
+    lastComputed: now,
+    signalMeans,
+    signalStdDevs,
+    signalSampleSize: sampleCount,
+    signalBaselineStartedAt: baselineStartedAt,
+    signalBaselineUpdatedAt: now,
   };
 
-  await saveCommunityBaseline(newBaseline);
+  await saveCommunityBaseline(newBaseline, subredditId);
 }
 
 // Helper: Process pending appeals that have expired

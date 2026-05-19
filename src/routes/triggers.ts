@@ -62,13 +62,15 @@ triggers.post('/on-mod-mail', async (c) => {
 
     const profile = await getUserProfile(username);
     const history = await getScoreHistory(username);
-    const baseline = await getCommunityBaseline();
+    const subredditId = input.conversationSubreddit?.id
+      || (await reddit.getCurrentSubreddit()).id;
+    const baseline = await getCommunityBaseline(subredditId);
     const breakdown = computeRiskScore(profile, baseline);
     const shift = detectBehavioralShift(history);
     
     let annotation = `🚨 **BotPrints Appeal Annotation** 🚨\n\n`;
     annotation += `u/${username} is currently in **Pending Appeal** state.\n\n`;
-    annotation += `**Risk Score**: ${breakdown.total}/100\n`;
+    annotation += `**Suspicion Score**: ${breakdown.total}/100\n`;
     if (shift?.shifted) {
       annotation += `**Behavior Shift**: ⚠️ Magnitude ${shift.magnitude}x\n`;
     }
@@ -121,7 +123,7 @@ async function sendWatchAlert(
   try {
     // Get current risk score for the alert
     const profile = await getUserProfile(username);
-    const baseline = await getCommunityBaseline();
+    const baseline = await getCommunityBaseline(subredditId);
     const breakdown = computeRiskScore(profile, baseline);
     const highestSignal = getHighestSignal(breakdown);
 
@@ -136,7 +138,7 @@ async function sendWatchAlert(
         `🔬 **BotPrints Watch Alert**\n\n` +
         `**User:** u/${username}\n` +
         `**Activity:** New ${contentType} in r/${subredditName}\n` +
-        `**Risk Score:** ${breakdown.total}/100\n` +
+        `**Suspicion Score:** ${breakdown.total}/100\n` +
         `**Top Signal:** ${highestSignal}\n\n` +
         `${directLink}\n\n` +
         `---\n\n` +
@@ -255,7 +257,7 @@ async function sendRaidAlert(
   try {
     const userList = participants
       .slice(0, 15) // Cap the list to keep modmail readable
-      .map((p) => `- u/${p.username} — Risk Score: **${p.score}**/100`)
+      .map((p) => `- u/${p.username} — Suspicion Score: **${p.score}**/100`)
       .join('\n');
 
     const usernames = participants.map((p) => p.username);
@@ -347,34 +349,35 @@ triggers.post('/on-post-create', async (c) => {
       const accountAgeDays = (Date.now() - profile.firstSeen) / (1000 * 60 * 60 * 24);
       if (accountAgeDays < 30) {
         try {
-          const baseline = await getCommunityBaseline();
-          const breakdown = computeRiskScore(profile, baseline);
-          if (breakdown.hasEnoughData) {
-            const match = await matchBanFingerprint(breakdown);
-            if (match) {
-              profile.banEvasionMatch = match;
-              await saveUserProfile(username, profile);
-              console.log(`BotPrints: Ban evasion detected! u/${username} matches banned u/${match.matchedFingerprint.originalUsername} (${Math.round(match.similarity * 100)}%)`);
-              
-              // Send modmail alert
-              if (input.subreddit?.id) {
-                try {
-                  await reddit.modMail.createModInboxConversation({
-                    subredditId: input.subreddit.id as any,
-                    subject: `BotPrints: Possible ban evader — u/${username}`,
-                    bodyMarkdown:
-                      `🕵️ **Ban Evasion Alert**\n\n` +
-                      `**New account:** u/${username}\n` +
-                      `**Behavioral similarity:** ${Math.round(match.similarity * 100)}% match to previously banned u/${match.matchedFingerprint.originalUsername}\n` +
-                      `**Risk Score:** ${breakdown.total}/100\n` +
-                      `**Account age:** ${Math.round(accountAgeDays)} days\n\n` +
-                      `This is an alert only — no automatic action has been taken. Review recommended.\n\n` +
-                      `---\n\n` +
-                      `*BotPrints uses privacy-preserving behavioral fingerprints (no PII) to detect ban evasion.*`,
-                  });
-                } catch (e) {
-                  console.warn('BotPrints: Could not send ban evasion modmail:', e);
-                }
+          const baseline = await getCommunityBaseline(input.subreddit?.id);
+          const breakdown = computeRiskScore(profile, baseline, { allowLowSignal: true });
+          const match = await matchBanFingerprint(breakdown);
+          if (match) {
+            profile.banEvasionMatch = match;
+            await saveUserProfile(username, profile);
+            console.log(`BotPrints: Ban evasion detected! u/${username} matches banned u/${match.matchedFingerprint.originalUsername} (${Math.round(match.similarity * 100)}%)`);
+
+            // Send modmail alert
+            if (input.subreddit?.id) {
+              try {
+                const riskLabel = breakdown.hasEnoughData
+                  ? `${breakdown.total}/100`
+                  : 'Insufficient data';
+                await reddit.modMail.createModInboxConversation({
+                  subredditId: input.subreddit.id as any,
+                  subject: `BotPrints: Possible ban evader — u/${username}`,
+                  bodyMarkdown:
+                    `🕵️ **Ban Evasion Alert**\n\n` +
+                    `**New account:** u/${username}\n` +
+                    `**Behavioral similarity:** ${Math.round(match.similarity * 100)}% match to previously banned u/${match.matchedFingerprint.originalUsername}\n` +
+                    `**Suspicion Score:** ${riskLabel}\n` +
+                    `**Account age:** ${Math.round(accountAgeDays)} days\n\n` +
+                    `This is an alert only — no automatic action has been taken. Review recommended.\n\n` +
+                    `---\n\n` +
+                    `*BotPrints uses privacy-preserving behavioral fingerprints (no PII) to detect ban evasion.*`,
+                });
+              } catch (e) {
+                console.warn('BotPrints: Could not send ban evasion modmail:', e);
               }
             }
           }

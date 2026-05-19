@@ -35,6 +35,15 @@ export interface UserProfile {
   banEvasionMatch?: BanEvasionMatch;
 }
 
+export interface SignalStats {
+  temporal: number;
+  circadian: number;
+  engagement: number;
+  editRate: number;
+  burstSilence: number;
+  voteCorrelation: number;
+}
+
 export interface CommunityBaseline {
   avgInterArrivalCV: number;
   avgCircadianEntropy: number;
@@ -42,6 +51,11 @@ export interface CommunityBaseline {
   avgEditRate: number;
   sampleSize: number;
   lastComputed: number;
+  signalMeans?: SignalStats;
+  signalStdDevs?: SignalStats;
+  signalSampleSize?: number;
+  signalBaselineStartedAt?: number;
+  signalBaselineUpdatedAt?: number;
 }
 
 export const DEFAULT_PROFILE = (username: string): UserProfile => ({
@@ -63,6 +77,7 @@ export const DEFAULT_BASELINE: CommunityBaseline = {
   avgEditRate: 0.08, // assume occasional editing
   sampleSize: 0,
   lastComputed: 0,
+  signalSampleSize: 0,
 };
 
 export interface ScoreBreakdown {
@@ -72,6 +87,7 @@ export interface ScoreBreakdown {
   editRate: number; // 0-10
   burstSilence: number; // 0-15
   voteCorrelation: number; // 0-15 — vote timing correlation
+  elevationCount: number; // number of elevated signals (0-6)
   total: number; // 0-100
   hasEnoughData: boolean;
 }
@@ -88,6 +104,10 @@ export interface ScoredUser {
   score: number;
   amplifiedScore?: number; // score after new account multiplier
   isNewAccount?: boolean; // true if multiplier was applied
+  insufficientData?: boolean; // true when below minimum activity threshold
+  activityCount?: number; // posts + comments collected
+  activityThreshold?: number; // minimum required for scoring
+  accountAgeDays?: number;
   breakdown: ScoreBreakdown;
   shift: ShiftResult;
   profile: UserProfile;
@@ -97,6 +117,15 @@ export interface ScoredUser {
   banEvasionMatch?: BanEvasionMatch;
   isWatched?: boolean;
   isCleared?: boolean;
+}
+
+export interface MonitoredUser {
+  username: string;
+  profile: UserProfile;
+  activityCount: number;
+  activityThreshold: number;
+  accountAgeDays: number;
+  isNewAccount?: boolean;
 }
 
 export interface CoordinatedGroup {

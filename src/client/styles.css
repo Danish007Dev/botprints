@@ -73,6 +73,17 @@ body {
 .metric-item { background: rgba(255,255,255,0.02); border-radius: var(--radius-sm); padding: 10px 8px; text-align: center; }
 .m-val { font-size: 18px; font-weight: 800; color: var(--text-primary); }
 .m-lbl { font-size: 9px; color: var(--text-muted); text-transform: uppercase; margin-top: 4px; }
+
+/* Community Calibration Note */
+.calibration-note {
+  background: rgba(255, 165, 2, 0.08);
+  border: 1px solid rgba(255, 165, 2, 0.25);
+  color: var(--accent-amber);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  font-size: 11px;
+  margin-bottom: 12px;
+}
 /* Ring Alert */
 .ring-alert { margin-bottom: 14px; }
 .ring-box { background: linear-gradient(135deg, rgba(165,94,234,0.1), rgba(55,66,250,0.08));
@@ -180,6 +191,44 @@ body {
   margin-top: 4px;
   line-height: 1.4;
 }
+
+.community-profile-note {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+.community-profile-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.community-profile-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.community-legend {
+  font-size: 10px;
+  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.legend-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.legend-community { background: var(--accent-cyan); }
+.legend-global { background: rgba(139, 146, 154, 0.6); border: 1px dashed rgba(139, 146, 154, 0.9); }
 
 /* Sliders */
 .slider {
@@ -396,6 +445,25 @@ body {
 
 /* Grid */
 .grid { display: flex; flex-direction: column; gap: 8px; }
+.monitor-header {
+  margin-top: 14px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.monitor-subtext {
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: none;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+.monitor-card { cursor: default; }
 
 /* User Card */
 .user-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
@@ -404,6 +472,7 @@ body {
 .user-card.risk-high { border-left: 3px solid var(--accent-red); }
 .user-card.risk-medium { border-left: 3px solid var(--accent-amber); }
 .user-card.risk-low { border-left: 3px solid var(--accent-green); }
+.user-card.risk-insufficient { border-left: 3px solid var(--text-muted); }
 .user-card.risk-high::before { content: ''; position: absolute; inset: 0;
   background: linear-gradient(135deg, var(--glow-red), transparent 50%); pointer-events: none; }
 .user-card.in-ring { border-right: 3px solid var(--accent-purple); }
@@ -420,7 +489,9 @@ body {
 .score-badge.high { color: var(--accent-red); }
 .score-badge.medium { color: var(--accent-amber); }
 .score-badge.low { color: var(--accent-green); }
+.score-badge.insufficient { color: var(--text-muted); }
 .score-label { font-size: 8px; color: var(--text-muted); text-align: center; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.5px; }
+.score-elevation { font-size: 9px; color: var(--text-secondary); text-align: center; margin-top: 2px; }
 
 /* Signals */
 .signals { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
@@ -429,6 +500,41 @@ body {
 .signal-label { font-size: 8px; color: var(--text-secondary); margin-top: 1px; }
 .signal-bar { height: 2px; background: rgba(255,255,255,0.04); border-radius: 2px; margin-top: 3px; overflow: hidden; }
 .signal-bar-fill { height: 100%; border-radius: 2px; transition: width 0.6s ease; }
+
+.data-progress {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: var(--bg-badge);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.progress-track {
+  height: 6px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+}
+.progress-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--text-secondary);
+  margin-top: 6px;
+}
+.progress-hint {
+  font-size: 9px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+.data-note {
+  font-size: 11px;
+  color: var(--text-secondary);
+  padding: 6px 0 2px;
+}
 
 /* Expanded details */
 .card-details { overflow: hidden; max-height: 0; transition: max-height 0.3s ease; }

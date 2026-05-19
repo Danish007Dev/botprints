@@ -15,6 +15,7 @@ export {
 
 export {
   updateUserScore,
+  removeUserScore,
   getCachedRiskScore,
   getTopRiskyUsers,
   dismissUser,

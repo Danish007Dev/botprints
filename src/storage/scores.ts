@@ -16,6 +16,10 @@ export async function updateUserScore(
   await redis.zAdd(RANKED_KEY, { member: username, score });
 }
 
+export async function removeUserScore(username: string): Promise<void> {
+  await redis.zRem(RANKED_KEY, [username]);
+}
+
 /**
  * O(1) lookup of a user's cached risk score from the ranked sorted set.
  * Returns 0 if the user hasn't been scored yet.

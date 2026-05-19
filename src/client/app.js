@@ -7,9 +7,13 @@
   var currentView = 'dashboard';
   var allUsers = [];
   var allClearedUsers = [];
+  var monitoredUsers = [];
   var coordGroups = [];
   var allAppeals = [];
   var isDemoLoaded = false;
+  var dataThresholds = { minActivityForScore: 25, minActivityForSignals: 10 };
+  var communityBaseline = null;
+  var communityCalibration = null;
 
   // Ultra-safe DOM helpers
   function getEl(id) {
@@ -124,8 +128,12 @@
 
       allUsers = (data && data.users) || [];
       allClearedUsers = (data && data.clearedUsers) || [];
+      monitoredUsers = (data && data.monitoredUsers) || [];
       coordGroups = (data && data.coordGroups) || [];
       isDemoLoaded = (data && data.isDemoLoaded) || false;
+      dataThresholds = (data && data.thresholds) || dataThresholds;
+      communityBaseline = (data && data.baseline) || null;
+      communityCalibration = (data && data.calibration) || null;
       hideEl('loading');
       
       var btn = getEl('btn-demo');
@@ -142,6 +150,8 @@
       if (data && data.summary && data.summary.totalTracked > 0) {
         renderSummary(data.summary);
       }
+      renderCalibrationNote(communityCalibration);
+      renderCommunityProfile();
       if (coordGroups.length > 0) {
         renderRingAlerts(coordGroups);
       }
@@ -177,6 +187,33 @@
     setTxt('s-rings', s.coordGroupCount || 0);
     setTxt('s-health', s.healthScore || 0);
     showEl('summary-grid'); // keep summary grid just in case, but metrics-dashboard is main
+  }
+
+  function buildCalibrationMessage(c) {
+    if (!c) return '';
+    var parts = [];
+    if (c.sampleSize < c.minSampleSize) {
+      parts.push('Community calibration requires ' + c.minSampleSize + '+ tracked users (currently ' + c.sampleSize + ').');
+    }
+    if (c.daysSinceStart < c.minDays) {
+      parts.push('Community calibration in progress — ' + c.daysSinceStart + '/' + c.minDays + ' days.');
+    }
+    if (!parts.length) {
+      parts.push('Community calibration in progress.');
+    }
+    return parts.join(' ');
+  }
+
+  function renderCalibrationNote(c) {
+    var note = getEl('calibration-note');
+    if (!note) return;
+    if (!c || c.ready) {
+      note.style.display = 'none';
+      return;
+    }
+
+    note.textContent = buildCalibrationMessage(c);
+    note.style.display = '';
   }
 
   function renderMetrics(m) {
@@ -396,12 +433,32 @@
       filtered = allClearedUsers;
     }
 
-    if (!filtered.length) { showEl('empty-state'); return; }
+    var showMonitored = currentFilter === 'all' && monitoredUsers.length > 0;
+    if (!filtered.length && !showMonitored) { showEl('empty-state'); return; }
     hideEl('empty-state');
 
-    filtered.sort(function(a, b) { return b.score - a.score; });
-    for (var i = 0; i < filtered.length; i++) {
-      grid.appendChild(createUserCard(filtered[i]));
+    if (filtered.length) {
+      filtered.sort(function(a, b) { return (b.score || 0) - (a.score || 0); });
+      for (var i = 0; i < filtered.length; i++) {
+        grid.appendChild(createUserCard(filtered[i]));
+      }
+    }
+
+    if (showMonitored) {
+      var header = document.createElement('div');
+      header.className = 'monitor-header';
+      header.innerHTML =
+        '<div>Accounts being monitored — awaiting enough data</div>' +
+        '<div class="monitor-subtext">Signals start at ' + ((dataThresholds && dataThresholds.minActivityForSignals) || 10) +
+          ' activity. Scoring starts at ' + ((dataThresholds && dataThresholds.minActivityForScore) || 25) + '.</div>';
+      grid.appendChild(header);
+
+      monitoredUsers.sort(function(a, b) {
+        return (b.activityCount || 0) - (a.activityCount || 0);
+      });
+      for (var m = 0; m < monitoredUsers.length; m++) {
+        grid.appendChild(createMonitoredCard(monitoredUsers[m]));
+      }
     }
   }
 
@@ -454,11 +511,42 @@
     return card;
   }
 
-  function riskClass(s) { return s >= 70 ? 'high' : s >= 40 ? 'medium' : 'low'; }
+  function riskClass(s, insufficient) { return insufficient ? 'insufficient' : s >= 70 ? 'high' : s >= 40 ? 'medium' : 'low'; }
   function sigColor(v, max) {
     if (max <= 0) return '#2ed573';
     var r = v / max;
     return r >= 0.7 ? '#ff4757' : r >= 0.4 ? '#ffa502' : '#2ed573';
+  }
+
+  function getActivityMeta(user, profile) {
+    var activityCount = typeof user.activityCount === 'number'
+      ? user.activityCount
+      : (profile.posts || 0) + (profile.comments || 0);
+    var activityThreshold = typeof user.activityThreshold === 'number'
+      ? user.activityThreshold
+      : (dataThresholds && dataThresholds.minActivityForScore) || 25;
+    var signalThreshold = (dataThresholds && dataThresholds.minActivityForSignals) || 10;
+    return {
+      activityCount: activityCount,
+      activityThreshold: activityThreshold,
+      signalThreshold: signalThreshold,
+    };
+  }
+
+  function buildDataProgress(activityCount, activityThreshold, signalThreshold) {
+    var pct = activityThreshold > 0 ? Math.min(100, Math.round((activityCount / activityThreshold) * 100)) : 0;
+    var hint = activityCount < signalThreshold
+      ? 'Signals start at ' + signalThreshold + ' activity'
+      : 'Scoring starts at ' + activityThreshold + ' activity';
+
+    return '<div class="data-progress">' +
+      '<div class="progress-track"><div class="progress-fill" style="width:' + pct + '%"></div></div>' +
+      '<div class="progress-meta">' +
+        '<span>' + activityCount + '/' + activityThreshold + ' posts/comments</span>' +
+        '<span>' + pct + '%</span>' +
+      '</div>' +
+      '<div class="progress-hint">' + hint + '</div>' +
+    '</div>';
   }
 
   function createRadarSVG(b) {
@@ -511,6 +599,61 @@
     return svg;
   }
 
+  function createCommunityRadarSVG(communityVals, referenceVals) {
+    var maxes = [25, 20, 15, 10, 15, 15];
+    var labels = ['Time', 'Day', 'Act', 'Edit', 'Spk', 'Vote'];
+    var cx = 60, cy = 60, radius = 44, n = 6;
+
+    var angles = [];
+    for (var i = 0; i < n; i++) angles.push((Math.PI * 2 * i) / n - Math.PI / 2);
+
+    var svg = '<svg viewBox="0 0 120 120" width="120" height="120">';
+
+    // Grid circles
+    var gridLevels = [0.25, 0.5, 0.75, 1];
+    for (var g = 0; g < gridLevels.length; g++) {
+      svg += '<circle cx="' + cx + '" cy="' + cy + '" r="' + (radius * gridLevels[g]) +
+        '" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="0.6"/>';
+    }
+    // Axes
+    for (var a = 0; a < angles.length; a++) {
+      svg += '<line x1="' + cx + '" y1="' + cy +
+        '" x2="' + (cx + radius * Math.cos(angles[a])) +
+        '" y2="' + (cy + radius * Math.sin(angles[a])) +
+        '" stroke="rgba(255,255,255,0.06)" stroke-width="0.6"/>';
+    }
+
+    function points(vals) {
+      var pts = [];
+      for (var d = 0; d < n; d++) {
+        var ratio = maxes[d] > 0 ? Math.min((vals[d] || 0) / maxes[d], 1) : 0;
+        pts.push((cx + radius * ratio * Math.cos(angles[d])) + ',' +
+          (cy + radius * ratio * Math.sin(angles[d])));
+      }
+      return pts.join(' ');
+    }
+
+    // Reference (global default)
+    svg += '<polygon points="' + points(referenceVals) + '" fill="rgba(139,146,154,0.12)" ' +
+      'stroke="rgba(139,146,154,0.7)" stroke-width="1" stroke-dasharray="3 2"/>';
+
+    // Community average
+    svg += '<polygon points="' + points(communityVals) + '" fill="rgba(24,220,255,0.22)" ' +
+      'stroke="#18dcff" stroke-width="1.6"/>';
+
+    // Labels
+    for (var l = 0; l < labels.length; l++) {
+      var lx = cx + (radius + 14) * Math.cos(angles[l]);
+      var ly = cy + (radius + 14) * Math.sin(angles[l]);
+      svg += '<text x="' + lx + '" y="' + ly +
+        '" text-anchor="middle" dominant-baseline="central" fill="#8b929a" font-size="7">' +
+        labels[l] + '</text>';
+    }
+
+    svg += '</svg>';
+    return svg;
+  }
+
   function sigHTML(label, value, max) {
     var c = sigColor(value, max);
     var w = max > 0 ? ((value / max) * 100) : 0;
@@ -523,7 +666,8 @@
 
   function createUserCard(user) {
     if (!user) return document.createElement('div');
-    var risk = riskClass(user.score || 0);
+    var isInsufficient = !!user.insufficientData;
+    var risk = riskClass(user.score || 0, isInsufficient);
     var card = document.createElement('div');
     var ringClass = user.coordGroup ? ' in-ring' : '';
     card.className = 'user-card risk-' + risk + ringClass;
@@ -532,7 +676,14 @@
     var profile = user.profile || {};
     var days = Math.max(1, Math.round((Date.now() - (profile.firstSeen || Date.now())) / 86400000));
     var b = user.breakdown || {};
+    var activityMeta = getActivityMeta(user, profile);
+    var elevationCount = typeof b.elevationCount === 'number' ? b.elevationCount : 0;
     var uname = user.username || 'unknown';
+    var isAmplified = !!(user.isNewAccount && user.amplifiedScore);
+    var scoreValue = isInsufficient ? '—' : (user.amplifiedScore || user.score || 0);
+    var scoreLabel = isInsufficient ? 'Insufficient Data' : (isAmplified ? 'Amplified' : 'Suspicion');
+    var scoreLabelStyle = isAmplified ? ' style="color: #ffa502;"' : '';
+    var scoreMeta = isInsufficient ? 'Collecting data' : (elevationCount + ' of 6 signals elevated');
 
     var badges = '';
     if (user.banEvasionMatch || (profile.banEvasionMatch)) {
@@ -546,6 +697,21 @@
     if (user.shift && user.shift.shifted) badges += '<span class="badge badge-shifted">⚡ Behavior Changed</span>';
     if (user.coordGroup) badges += '<span class="badge badge-ring">🔗 Coordinated Group</span>';
     if (!badges) badges = '<span class="badge badge-stable">✓ Normal Behavior</span>';
+
+    var signalsHtml = isInsufficient
+      ? buildDataProgress(activityMeta.activityCount, activityMeta.activityThreshold, activityMeta.signalThreshold)
+      : '<div class="signals">' +
+          sigHTML('Timing', b.temporal || 0, 25) +
+          sigHTML('Daily Pattern', b.circadian || 0, 20) +
+          sigHTML('Activity', b.engagement || 0, 15) +
+          sigHTML('Edits', b.editRate || 0, 10) +
+          sigHTML('Spikes', b.burstSilence || 0, 15) +
+          sigHTML('Votes', b.voteCorrelation || 0, 15) +
+        '</div>';
+
+    var radarHtml = isInsufficient
+      ? '<div class="data-note">Insufficient data to compute full signals yet.</div>'
+      : '<div class="radar-row">' + createRadarSVG(b) + '</div>';
 
     // Action functions are now internal to this scope since we attach them directly
     function onWatchUser(u, btn) {
@@ -662,6 +828,21 @@
         .catch(function() { showToast('Error re-analyzing u/' + u, 'error'); });
     }
 
+    var dataPoints = activityMeta.activityCount;
+    var confidence = 'Low';
+    var confidenceColor = '#8b929a';
+    var confidenceText = 'Low confidence — limited data or single-signal anomaly.';
+    
+    if (dataPoints >= 150 && elevationCount >= 5) {
+      confidence = 'High';
+      confidenceColor = '#ff4757';
+      confidenceText = 'High confidence — extensive data and multi-signal anomaly.';
+    } else if (dataPoints >= 50 && elevationCount >= 3) {
+      confidence = 'Medium';
+      confidenceColor = '#ffa502';
+      confidenceText = 'Medium confidence — moderate data and signals.';
+    }
+
     var html =
       '<div class="card-header">' +
         '<div class="user-info">' +
@@ -672,25 +853,20 @@
             '<div class="user-badges">' + badges + '</div>' +
           '</div>' +
         '</div>' +
-        '<div><div class="score-badge ' + risk + '">' + (user.amplifiedScore || user.score || 0) + '</div>' +
-          (user.isNewAccount ? '<div class="score-label" style="color: #ffa502;">Amplified</div>' : '<div class="score-label">Risk</div>') +
-          (user.isNewAccount && user.amplifiedScore ? '<div style="font-size: 10px; color: var(--text-secondary); text-align: center;">(raw: ' + user.score + ')</div>' : '') +
+        '<div><div class="score-badge ' + risk + '">' + scoreValue + '</div>' +
+          '<div class="score-label"' + scoreLabelStyle + '>' + scoreLabel + '</div>' +
+          '<div class="score-elevation">' + scoreMeta + '</div>' +
+          (isAmplified ? '<div style="font-size: 10px; color: var(--text-secondary); text-align: center;">(raw: ' + user.score + ')</div>' : '') +
+          (!isInsufficient ? '<div class="confidence-indicator" style="margin-top: 6px; font-size: 10px; text-align: center; color: ' + confidenceColor + ';" title="' + confidenceText + '">Confidence: <strong>' + confidence + '</strong></div>' : '') +
         '</div>' +
       '</div>' +
-      '<div class="signals">' +
-        sigHTML('Timing', b.temporal || 0, 25) +
-        sigHTML('Daily Pattern', b.circadian || 0, 20) +
-        sigHTML('Activity', b.engagement || 0, 15) +
-        sigHTML('Edits', b.editRate || 0, 10) +
-        sigHTML('Spikes', b.burstSilence || 0, 15) +
-        sigHTML('Votes', b.voteCorrelation || 0, 15) +
-      '</div>' +
+      signalsHtml +
       '<div class="card-details"><div class="details-inner">' +
-        '<div class="radar-row">' + createRadarSVG(b) + '</div>';
+        radarHtml;
 
     // Ban evasion fingerprint comparison
     var bem2 = user.banEvasionMatch || (profile.banEvasionMatch);
-    if (bem2) {
+    if (bem2 && !isInsufficient) {
       var fp = bem2.matchedFingerprint;
       var bannedBreakdown = {
         temporal: Math.round((fp.vector[0] || 0) * 25),
@@ -721,17 +897,23 @@
     if (user.isCleared) {
       html += '<button class="btn-action action-undismiss" data-user="' + uname + '">↺ Re-Analyze</button>';
     } else {
+      var allowTierActions = !isInsufficient && elevationCount >= 4;
+
       // AutoMod Rule Generator button for ring members
-      if (user.suggestedRule) {
+      if (user.suggestedRule && allowTierActions) {
         html += '<button class="btn-action action-automod" style="width: 100%; margin-bottom: 8px; background: rgba(156, 39, 176, 0.2); border-color: #9c27b0; color: #e056fd;">🤖 Generate AutoMod Rule</button>';
       }
       
       // 3-Tier Enforcement buttons
       html += '<button class="btn-action action-watch" data-user="' + uname + '">' + (user.isWatched ? '👁 Watched' : '👁 Watch') + '</button>' +
-        '<button class="btn-action action-filter" data-user="' + uname + '">🔽 Filter</button>' +
-        '<button class="btn-action action-remove-appeal" data-user="' + uname + '">⚠ Remove + Appeal</button>' +
-        '<button class="btn-action action-ban-report" data-user="' + uname + '">🚫 Ban + Report</button>' +
-        '<button class="btn-action action-safe" data-user="' + uname + '">✓ Mark Safe</button>';
+        '<button class="btn-action action-filter" data-user="' + uname + '">🔽 Filter</button>';
+
+      if (allowTierActions) {
+        html += '<button class="btn-action action-remove-appeal" data-user="' + uname + '">⚠ Remove + Appeal</button>' +
+          '<button class="btn-action action-ban-report" data-user="' + uname + '">🚫 Ban + Report</button>';
+      }
+
+      html += '<button class="btn-action action-safe" data-user="' + uname + '">✓ Mark Safe</button>';
     }
     html += '</div></div></div>';
     card.innerHTML = html;
@@ -791,6 +973,42 @@
     return card;
   }
 
+  function createMonitoredCard(user) {
+    if (!user) return document.createElement('div');
+    var card = document.createElement('div');
+    card.className = 'user-card risk-insufficient monitor-card';
+
+    var profile = user.profile || {};
+    var uname = user.username || 'unknown';
+    var days = typeof user.accountAgeDays === 'number'
+      ? user.accountAgeDays
+      : Math.max(1, Math.round((Date.now() - (profile.firstSeen || Date.now())) / 86400000));
+    var activityMeta = getActivityMeta(user, profile);
+
+    var badges = '';
+    if (user.isNewAccount) badges += '<span class="badge badge-newaccount">🆕 New Account</span>';
+    if (!badges) badges = '<span class="badge badge-stable">Collecting data</span>';
+
+    card.innerHTML =
+      '<div class="card-header">' +
+        '<div class="user-info">' +
+          '<div class="avatar">' + uname[0].toUpperCase() + '</div>' +
+          '<div>' +
+            '<div class="username">u/' + uname + '</div>' +
+            '<div class="user-meta">' + (profile.posts || 0) + ' posts, ' + (profile.comments || 0) + ' comments, active ' + days + ' days</div>' +
+            '<div class="user-badges">' + badges + '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div>' +
+          '<div class="score-badge insufficient">—</div>' +
+          '<div class="score-label">Insufficient Data</div>' +
+        '</div>' +
+      '</div>' +
+      buildDataProgress(activityMeta.activityCount, activityMeta.activityThreshold, activityMeta.signalThreshold);
+
+    return card;
+  }
+
   // ─── View Switching ────────────────────────────────────────────────────────
   function switchView(view) {
     currentView = view;
@@ -812,6 +1030,53 @@
   }
 
   // ─── Settings Panel ────────────────────────────────────────────────────────
+
+  function renderCommunityProfile() {
+    var section = getEl('community-profile');
+    var radar = getEl('community-radar');
+    var note = getEl('community-profile-note');
+    var card = getEl('community-profile-card');
+    if (!section || !radar || !note || !card) return;
+
+    section.style.display = '';
+
+    if (!communityBaseline || !communityCalibration || !communityCalibration.ready) {
+      var msg = buildCalibrationMessage(communityCalibration);
+      note.textContent = msg || 'Community calibration in progress.';
+      note.style.display = '';
+      card.style.display = 'none';
+      return;
+    }
+
+    var means = communityBaseline.signalMeans;
+    if (!means) {
+      note.textContent = 'Community calibration in progress.';
+      note.style.display = '';
+      card.style.display = 'none';
+      return;
+    }
+
+    var communityVals = [
+      means.temporal || 0,
+      means.circadian || 0,
+      means.engagement || 0,
+      means.editRate || 0,
+      means.burstSilence || 0,
+      means.voteCorrelation || 0,
+    ];
+    var referenceVals = [
+      25 * 0.6,
+      20 * 0.6,
+      15 * 0.6,
+      10 * 0.6,
+      15 * 0.6,
+      15 * 0.6,
+    ];
+
+    radar.innerHTML = createCommunityRadarSVG(communityVals, referenceVals);
+    note.style.display = 'none';
+    card.style.display = '';
+  }
 
   function loadSettings() {
     fetch('/api/settings')
@@ -836,6 +1101,7 @@
         setCheckbox('set-shared-threat', s.sharedThreatLayer);
         // Update dynamic tier labels
         updateDynamicLabels(s);
+        renderCommunityProfile();
       })
       .catch(function(e) { console.error('Failed to load settings:', e); });
   }

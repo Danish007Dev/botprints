@@ -49,12 +49,99 @@ function computeVoteCorrelation(voteScoreDeltas: number[]): number {
   return Math.max(0, 1 - cv / 1.0);
 }
 
+export const MIN_ACTIVITY_FOR_SIGNALS = 10;
+export const MIN_ACTIVITY_FOR_SCORE = 25;
+export const MIN_BASELINE_SAMPLE = 50;
+export const MIN_BASELINE_DAYS = 30;
+export const ELEVATION_ZSCORE = 1.5;
+
+const SIGNAL_MAX = {
+  temporal: 25,
+  circadian: 20,
+  engagement: 15,
+  editRate: 10,
+  burstSilence: 15,
+  voteCorrelation: 15,
+};
+
+const ELEVATION_RATIO = 0.6;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function isCommunityBaselineReady(baseline: CommunityBaseline): boolean {
+  if (!baseline.signalMeans || !baseline.signalStdDevs) return false;
+  const sampleSize = baseline.signalSampleSize ?? 0;
+  if (sampleSize < MIN_BASELINE_SAMPLE) return false;
+  const startedAt = baseline.signalBaselineStartedAt ?? 0;
+  if (!startedAt) return false;
+  const days = (Date.now() - startedAt) / DAY_MS;
+  return days >= MIN_BASELINE_DAYS;
+}
+
+function zScore(value: number, mean?: number, stdDev?: number): number {
+  if (mean === undefined || stdDev === undefined || stdDev <= 0) return 0;
+  return (value - mean) / stdDev;
+}
+
+function countElevatedSignals(scores: {
+  temporal: number;
+  circadian: number;
+  engagement: number;
+  editRate: number;
+  burstSilence: number;
+  voteCorrelation: number;
+}, baseline: CommunityBaseline): number {
+  let count = 0;
+
+  if (isCommunityBaselineReady(baseline)) {
+    const means = baseline.signalMeans;
+    const stds = baseline.signalStdDevs;
+
+    if (zScore(scores.temporal, means?.temporal, stds?.temporal) >= ELEVATION_ZSCORE) count++;
+    if (zScore(scores.circadian, means?.circadian, stds?.circadian) >= ELEVATION_ZSCORE) count++;
+    if (zScore(scores.engagement, means?.engagement, stds?.engagement) >= ELEVATION_ZSCORE) count++;
+    if (zScore(scores.editRate, means?.editRate, stds?.editRate) >= ELEVATION_ZSCORE) count++;
+    if (zScore(scores.burstSilence, means?.burstSilence, stds?.burstSilence) >= ELEVATION_ZSCORE) count++;
+    if (zScore(scores.voteCorrelation, means?.voteCorrelation, stds?.voteCorrelation) >= ELEVATION_ZSCORE) count++;
+    return count;
+  }
+
+  const thresholds = {
+    temporal: Math.ceil(SIGNAL_MAX.temporal * ELEVATION_RATIO),
+    circadian: Math.ceil(SIGNAL_MAX.circadian * ELEVATION_RATIO),
+    engagement: Math.ceil(SIGNAL_MAX.engagement * ELEVATION_RATIO),
+    editRate: Math.ceil(SIGNAL_MAX.editRate * ELEVATION_RATIO),
+    burstSilence: Math.ceil(SIGNAL_MAX.burstSilence * ELEVATION_RATIO),
+    voteCorrelation: Math.ceil(SIGNAL_MAX.voteCorrelation * ELEVATION_RATIO),
+  };
+
+  if (scores.temporal >= thresholds.temporal) count++;
+  if (scores.circadian >= thresholds.circadian) count++;
+  if (scores.engagement >= thresholds.engagement) count++;
+  if (scores.editRate >= thresholds.editRate) count++;
+  if (scores.burstSilence >= thresholds.burstSilence) count++;
+  if (scores.voteCorrelation >= thresholds.voteCorrelation) count++;
+
+  return count;
+}
+
+function applyCoOccurrenceGate(rawTotal: number, elevationCount: number): number {
+  if (elevationCount <= 1) return Math.min(rawTotal, 35);
+  if (elevationCount === 2) return Math.min(rawTotal, 55);
+  return rawTotal;
+}
+
+export interface RiskScoreOptions {
+  allowLowSignal?: boolean; // allow signal computation below the minimum activity threshold
+}
+
 export function computeRiskScore(
   profile: UserProfile,
   baseline: CommunityBaseline,
-  minPosts: number = 5
+  options: RiskScoreOptions = {}
 ): ScoreBreakdown {
-  if (profile.posts < minPosts) {
+  const activityCount = (profile.posts || 0) + (profile.comments || 0);
+
+  if (activityCount < MIN_ACTIVITY_FOR_SIGNALS && !options.allowLowSignal) {
     return {
       temporal: 0,
       circadian: 0,
@@ -62,6 +149,7 @@ export function computeRiskScore(
       editRate: 0,
       burstSilence: 0,
       voteCorrelation: 0,
+      elevationCount: 0,
       total: 0,
       hasEnoughData: false,
     };
@@ -113,6 +201,23 @@ export function computeRiskScore(
   // Signal 6 — Vote correlation (0-15)
   const voteCorrelation = Math.round(15 * voteCorr);
 
+  const rawTotal = Math.min(
+    100,
+    temporal + circadian + engagement + editScore + burstSilence + voteCorrelation
+  );
+  const elevationCount = countElevatedSignals({
+    temporal,
+    circadian,
+    engagement,
+    editRate: editScore,
+    burstSilence,
+    voteCorrelation,
+  }, baseline);
+  const total =
+    activityCount >= MIN_ACTIVITY_FOR_SCORE
+      ? applyCoOccurrenceGate(rawTotal, elevationCount)
+      : 0;
+
   return {
     temporal,
     circadian,
@@ -120,7 +225,8 @@ export function computeRiskScore(
     editRate: editScore,
     burstSilence,
     voteCorrelation,
-    total: Math.min(100, temporal + circadian + engagement + editScore + burstSilence + voteCorrelation),
-    hasEnoughData: true,
+    elevationCount,
+    total,
+    hasEnoughData: activityCount >= MIN_ACTIVITY_FOR_SCORE,
   };
 }

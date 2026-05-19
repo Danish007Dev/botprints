@@ -11,7 +11,7 @@ Built for the [Reddit Mod Tools Hackathon 2026](https://devpost.com/) on Devvit 
 | Existing Tool | Approach | BotPrints Advantage |
 |--------------|----------|---------------------|
 | StopBots | Reactive CAPTCHA challenges | BotPrints is **passive** — zero user friction |
-| Bot Bouncer | Crowdsourced blocklist | Can't catch **new** bots. We detect anomalies |
+| Bot Bouncer | Crowdsourced blocklist | BotPrints flags behavioral anomalies for human review |
 | Stop AI | Crowdsourced voting on content | Content-based = biased. We use **metadata only** |
 | *Any existing tool* | No raid detection | BotPrints has **real-time raid alerting** |
 | *Any existing tool* | No cross-subreddit sharing | BotPrints has **shared threat intelligence** |
@@ -32,7 +32,7 @@ Built for the [Reddit Mod Tools Hackathon 2026](https://devpost.com/) on Devvit 
 | 5 | **Burst-Silence** | Batch posting then going silent | 15 pts |
 | 6 | **Vote Correlation** | Suspiciously uniform upvote patterns (astroturfing) | 15 pts |
 
-**Total: 0–100 risk score.** Visualized on a 6-axis radar chart per user.
+**Total: 0–100 suspicion score.** Visualized on a 6-axis radar chart per user.
 
 ### 🔗 Coordinated Ring Detection (CIB)
 Detects bot rings by computing Jaccard similarity on 5-minute posting time windows across flagged users. Bot farms using the same scheduler are identified automatically.
@@ -41,7 +41,7 @@ Detects bot rings by computing Jaccard similarity on 5-minute posting time windo
 Catches warmed-up accounts that post normally for weeks then suddenly switch to spam mode. Uses z-score analysis against the user's own 7-day rolling baseline.
 
 ### 🆕 New Account Amplifier
-Accounts under a configurable age threshold (default 30 days) get their risk score multiplied (default 1.3x) before threshold comparison. Both raw and amplified scores are displayed. **Directly addresses communities targeted by new-account karma farming.**
+Accounts under a configurable age threshold (default 30 days) get their suspicion score multiplied (default 1.3x) before threshold comparison. Both raw and amplified scores are displayed. **Directly addresses communities targeted by new-account karma farming.**
 
 ### 🕵️ Ban Evasion Fingerprint Matching
 When a user is banned, their 6-dimensional behavioral fingerprint is stored (privacy-preserving — no PII, only math). When new accounts post, cosine similarity matching detects returning banned users on their **first post**, not their fiftieth.
@@ -178,7 +178,7 @@ Posts/Comments → Triggers (silent) → Redis Profile Update
 
 ## 🛡️ Safe & Responsible Usage
 
-1. **Not a Ban Hammer:** A high Risk Score indicates anomalous patterns, not definitive proof. Always review actual content before permanent action.
+1. **Not a Ban Hammer:** A high Suspicion Score indicates anomalous patterns, not definitive proof. Always review actual content before permanent action.
 2. **Helpful Bots:** Benign bots (AutoModerator, summary bots) will naturally score high. Use **✓ Mark Safe** to clear them.
 3. **Watch Before Acting:** Use the **👁 Watch** feature to silently monitor accounts before escalating.
 4. **Appeals Exist:** The Tier 2 action includes a built-in appeal pathway — users can always explain themselves.
