@@ -1,6 +1,6 @@
 {
   "$schema": "https://developers.reddit.com/schema/config-file.v1.json",
-  "name": "botprintsdev",
+  "name": "botprints",
   "server": {
     "dir": "dist/server",
     "entry": "index.cjs"
