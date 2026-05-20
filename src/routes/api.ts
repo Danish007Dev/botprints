@@ -53,7 +53,7 @@ import {
 } from '../scoring/riskScore.js';
 import { detectBehavioralShift } from '../scoring/shiftDetector.js';
 import { detectCoordinatedGroups } from '../scoring/coordinatedDetector.js';
-import { DEMO_PROFILES } from '../data/demoData.js';
+import { DEMO_PROFILES, DEMO_AUDIT_ENTRIES } from '../data/demoData.js';
 import { DEFAULT_BASELINE } from '../types/index.js';
 import type {
   ScoredUser,
@@ -424,13 +424,7 @@ api.post('/load-demo', async (c) => {
     for (const profile of DEMO_PROFILES) {
       await saveUserProfile(profile.username, profile);
       await registerUser(profile.username);
-      
-      // Simulate some fake metrics
-      await incrementMetric('accounts_actioned', 2);
-      await incrementMetric('items_filtered', 5);
-      await incrementMetric('bans_issued', 1);
-      await incrementMetric('rings_detected', 1);
-      
+
       const breakdown = computeRiskScore(profile, baseline);
       if (breakdown.hasEnoughData) {
         await updateUserScore(profile.username, breakdown.total);
@@ -442,6 +436,34 @@ api.post('/load-demo', async (c) => {
         }
       }
     }
+
+    // Seed demo watchlist/filter state
+    await addToWatchlist('AutoShill_9000');
+    await addToFilterList('CryptoMoonBot');
+
+    // Seed a demo appeal for SleeperAgent_X
+    await setAppealStatus('SleeperAgent_X', {
+      status: 'pending',
+      removalReason: 'Your content was removed due to detected automated behavior. If you believe this is an error, reply to this modmail.',
+      createdAt: Date.now() - 4 * 86400000,
+      expiresAt: Date.now() + 2 * 86400000,
+    });
+
+    // Seed the EvadeBot_Reborn as actioned (appears in Banned tab)
+    await markUserActioned('EvadeBot_Reborn');
+
+    // Seed demo audit log entries
+    for (const entry of DEMO_AUDIT_ENTRIES) {
+      await appendAuditEntry(entry);
+    }
+
+    // Seed demo metrics
+    await incrementMetric('accounts_actioned', 4);
+    await incrementMetric('items_filtered', 12);
+    await incrementMetric('bans_issued', 2);
+    await incrementMetric('rings_detected', 1);
+    await incrementMetric('appeals_sent', 1);
+
     return c.json({ status: 'ok', loaded: DEMO_PROFILES.length });
   } catch (err) {
     console.error('BotPrints API: Error loading demo:', err);
@@ -457,11 +479,15 @@ api.post('/unload-demo', async (c) => {
       await redis.del(`bp:user:${u}:profile`);
       await redis.del(`bp:user:${u}:scoreHistory`);
       await redis.del(`bp:dismissed:${u}`);
+      await redis.del(`bp:appeal:${u}`);
     }
     await redis.zRem('bp:users:all', usernames);
     await redis.zRem('bp:scores:ranked', usernames);
     await redis.zRem('bp:scores:cleared', usernames);
     await redis.zRem('bp:scores:watchlist', usernames);
+    await redis.zRem('bp:scores:actioned', usernames);
+    await redis.zRem('bp:scores:filtered', usernames);
+    await redis.zRem('bp:appeals:pending', usernames);
     
     return c.json({ status: 'ok', unloaded: usernames.length });
   } catch (err) {
@@ -822,6 +848,7 @@ api.post('/ban-report/:username', async (c) => {
     const currentUser = await reddit.getCurrentUser();
 
     // Ban the user permanently
+    let banSucceeded = false;
     try {
       await reddit.banUser({
         subredditName: subreddit.name,
@@ -831,41 +858,51 @@ api.post('/ban-report/:username', async (c) => {
         note: `BotPrints automated ban — high risk score + confirmed behavioral anomaly. Actioned by ${currentUser?.username || 'mod'}.`,
         message: 'Your account has been permanently banned from this community due to detected automated or inauthentic behavior patterns.',
       });
+      banSucceeded = true;
       console.log(`BotPrints API: Banned u/${username} from r/${subreddit.name}`);
     } catch (banErr) {
       const errStr = String(banErr);
       if (errStr.includes('CANT_RESTRICT_MODERATOR') || errStr.includes('MODERATOR')) {
         return c.json({ status: 'error', message: 'Cannot ban a subreddit moderator.' });
       }
-      console.warn(`BotPrints API: Failed to ban u/${username}:`, banErr);
+      // If user is already banned or suspended, treat as success and skip content reporting
+      if (errStr.includes('USER_DOESNT_EXIST') || errStr.includes('ALREADY_BANNED') || errStr.includes('404')) {
+        banSucceeded = true;
+        console.log(`BotPrints API: u/${username} is already banned/suspended — skipping content reporting.`);
+      } else {
+        console.warn(`BotPrints API: Failed to ban u/${username}:`, banErr);
+      }
     }
 
-    // Report recent content as spam to Reddit admins
+    // Report recent content as spam to Reddit admins (skip if user is already gone)
     let reportedCount = 0;
-    try {
-      const posts = await reddit.getPostsByUser({ username, limit: 10 }).all();
-      for (const post of posts) {
-        if (post.subredditName === subreddit.name) {
-          await reddit.report(post, { reason: 'BotPrints: Automated/inauthentic behavior — spam account' });
-          await post.remove();
-          reportedCount++;
+    if (banSucceeded) {
+      try {
+        const posts = await reddit.getPostsByUser({ username, limit: 10 }).all();
+        for (const post of posts) {
+          if (post.subredditName === subreddit.name) {
+            await reddit.report(post, { reason: 'BotPrints: Automated/inauthentic behavior — spam account' });
+            await post.remove();
+            reportedCount++;
+          }
         }
+      } catch (e) {
+        // User may be suspended/shadow-banned — content is inaccessible. This is fine.
+        console.log(`BotPrints API: Could not fetch posts for u/${username} (user may be suspended). Skipping.`);
       }
-    } catch (e) {
-      console.warn(`BotPrints API: Could not report posts for u/${username}:`, e);
-    }
 
-    try {
-      const comments = await reddit.getCommentsByUser({ username, limit: 25 }).all();
-      for (const comment of comments) {
-        if (comment.subredditName === subreddit.name) {
-          await reddit.report(comment, { reason: 'BotPrints: Automated/inauthentic behavior — spam account' });
-          await comment.remove();
-          reportedCount++;
+      try {
+        const comments = await reddit.getCommentsByUser({ username, limit: 25 }).all();
+        for (const comment of comments) {
+          if (comment.subredditName === subreddit.name) {
+            await reddit.report(comment, { reason: 'BotPrints: Automated/inauthentic behavior — spam account' });
+            await comment.remove();
+            reportedCount++;
+          }
         }
+      } catch (e) {
+        console.log(`BotPrints API: Could not fetch comments for u/${username} (user may be suspended). Skipping.`);
       }
-    } catch (e) {
-      console.warn(`BotPrints API: Could not report comments for u/${username}:`, e);
     }
     
     await incrementMetric('bans_issued', 1);
