@@ -17,6 +17,7 @@ import { SIGNALS } from '../shared/signals.js';
   var communityBaseline = null;
   var communityCalibration = null;
   var currentSubreddit = '';
+  var currentSettings = null; // Store active settings to drive UI colors
 
   // Ultra-safe DOM helpers
   function getEl(id) {
@@ -111,6 +112,17 @@ import { SIGNALS } from '../shared/signals.js';
       });
   }
 
+  function fetchCurrentSettings() {
+    return fetch('/api/settings')
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        if (data && data.settings) {
+          currentSettings = data.settings;
+        }
+      })
+      .catch(function(e) { console.error('Failed to load settings:', e); });
+  }
+
   function toggleDemoData() {
     var btn = getEl('btn-demo');
     if (btn) { btn.textContent = 'Loading...'; btn.disabled = true; }
@@ -139,7 +151,8 @@ import { SIGNALS } from '../shared/signals.js';
     var grid = getEl('user-grid');
     if (grid) grid.innerHTML = '';
 
-    return fetchDashboard().then(function(data) {
+    return Promise.all([fetchDashboard(), fetchCurrentSettings()]).then(function(results) {
+      var data = results[0];
       // ─── SECURITY: Block non-moderator access at the UI level ─────────
       if (data && data._accessDenied) {
         hideEl('loading');
@@ -557,7 +570,16 @@ import { SIGNALS } from '../shared/signals.js';
     return card;
   }
 
-  function riskClass(s, insufficient) { return insufficient ? 'insufficient' : s >= 70 ? 'high' : s >= 40 ? 'medium' : 'low'; }
+  function riskClass(s, insufficient) {
+    if (insufficient) return 'insufficient';
+    if (!currentSettings) return s >= 70 ? 'high' : s >= 40 ? 'medium' : 'low'; // Fallback
+    
+    // Use dynamic thresholds from settings
+    if (s >= currentSettings.mediumRiskCutoff) return 'high';       // Red
+    if (s >= currentSettings.lowRiskCutoff) return 'medium';        // Yellow
+    return 'low';                                                   // Green
+  }
+
   function sigColor(v, max) {
     if (max <= 0) return '#2ed573';
     var r = v / max;
@@ -1332,6 +1354,20 @@ import { SIGNALS } from '../shared/signals.js';
     var el = getEl(sliderId);
     if (!el) return;
     el.addEventListener('input', function() {
+      // Enforce slider non-overlapping constraints
+      if (sliderId === 'set-low') {
+        var medVal = getSliderVal('set-med');
+        if (parseInt(el.value, 10) >= medVal) el.value = medVal - 1;
+      } else if (sliderId === 'set-med') {
+        var lowVal = getSliderVal('set-low');
+        var highVal = getSliderVal('set-high');
+        if (parseInt(el.value, 10) <= lowVal) el.value = lowVal + 1;
+        if (parseInt(el.value, 10) >= highVal) el.value = highVal - 1;
+      } else if (sliderId === 'set-high') {
+        var medVal2 = getSliderVal('set-med');
+        if (parseInt(el.value, 10) <= medVal2) el.value = medVal2 + 1;
+      }
+
       var lbl = getEl(labelId);
       if (lbl) lbl.textContent = formatter ? formatter(el.value) : el.value;
     });
