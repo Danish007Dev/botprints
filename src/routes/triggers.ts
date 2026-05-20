@@ -23,6 +23,7 @@ import {
   registerUser,
   isUserWatched,
   isUserFiltered,
+  isUserActioned,
   getCachedRiskScore,
   getCommunityBaseline,
   getScoreHistory,
@@ -338,6 +339,10 @@ triggers.post('/on-post-create', async (c) => {
     if (!username || username === 'AutoModerator') {
       return c.json<TriggerResponse>({ status: 'success' }, 200);
     }
+    
+    if (await isUserActioned(username)) {
+      return c.json<TriggerResponse>({ status: 'success' }, 200);
+    }
 
     const profile = await getUserProfile(username);
     profile.username = username;
@@ -461,6 +466,10 @@ triggers.post('/on-post-update', async (c) => {
     if (!username || username === 'AutoModerator') {
       return c.json<TriggerResponse>({ status: 'success' }, 200);
     }
+    
+    if (await isUserActioned(username)) {
+      return c.json<TriggerResponse>({ status: 'success' }, 200);
+    }
 
     const score = input.post?.score;
     if (typeof score === 'number' && score > 0) {
@@ -501,6 +510,10 @@ triggers.post('/on-comment-create', async (c) => {
       return c.json<TriggerResponse>({ status: 'success' }, 200);
     }
     if (!username || username === 'AutoModerator') {
+      return c.json<TriggerResponse>({ status: 'success' }, 200);
+    }
+    
+    if (await isUserActioned(username)) {
       return c.json<TriggerResponse>({ status: 'success' }, 200);
     }
 
@@ -576,6 +589,10 @@ triggers.post('/on-post-update', async (c) => {
     if (!username) {
       return c.json<TriggerResponse>({ status: 'success' }, 200);
     }
+    
+    if (await isUserActioned(username)) {
+      return c.json<TriggerResponse>({ status: 'success' }, 200);
+    }
 
     const profile = await getUserProfile(username);
     profile.username = username;
@@ -611,6 +628,10 @@ triggers.post('/on-comment-update', async (c) => {
       return c.json<TriggerResponse>({ status: 'success' }, 200);
     }
     if (!username) {
+      return c.json<TriggerResponse>({ status: 'success' }, 200);
+    }
+    
+    if (await isUserActioned(username)) {
       return c.json<TriggerResponse>({ status: 'success' }, 200);
     }
 

@@ -24,6 +24,8 @@ import {
   setAppealStatus,
   getAppealStatus,
   appendAuditEntry,
+  markUserActioned,
+  isUserActioned,
   // Raid Detection
   getRaidState,
   clearRaidState,
@@ -177,6 +179,11 @@ api.get('/dashboard', async (c) => {
         const shift = detectBehavioralShift(history);
         const isWatched = await isUserWatched(username);
         const isFiltered = await isUserFiltered(username);
+        
+        if (await isUserActioned(username)) {
+          continue;
+        }
+
         const activityMeta = activityCache.get(username) || {
           activityCount: (profile.posts || 0) + (profile.comments || 0),
           accountAgeDays: Math.max(
@@ -244,6 +251,8 @@ api.get('/dashboard', async (c) => {
       const group = coordMemberMap.get(username);
       const hasBanEvasion = !!profile.banEvasionMatch;
       if (!group && !hasBanEvasion) continue;
+
+      if (await isUserActioned(username)) continue;
 
       try {
         const breakdown = computeRiskScore(profile, baseline);
@@ -618,6 +627,9 @@ api.post('/remove-appeal/:username', async (c) => {
     // Also add to filter list so future content is caught
     await addToFilterList(username);
 
+    // Mark user as actioned so they don't reappear on dashboard
+    await markUserActioned(username);
+
     // Store appeal status
     const appealData: any = {
       status: 'pending',
@@ -870,8 +882,8 @@ api.post('/ban-report/:username', async (c) => {
       console.warn(`BotPrints: Could not store ban fingerprint for u/${username}:`, fpErr);
     }
 
-    // Remove them from the active dashboard
-    await removeUserScore(username);
+    // Remove them from the active dashboard and mark as actioned
+    await markUserActioned(username);
 
     // Notify mod team via modmail
     try {

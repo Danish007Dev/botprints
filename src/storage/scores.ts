@@ -8,6 +8,7 @@ const RANKED_KEY = 'bp:scores:ranked';
 const DISMISSED_KEY = (u: string): string => `bp:dismissed:${u}`;
 const WATCHLIST_KEY = 'bp:scores:watchlist';
 const CLEARED_KEY = 'bp:scores:cleared';
+const ACTIONED_KEY = (u: string): string => `bp:actioned:${u}`;
 
 export async function updateUserScore(
   username: string,
@@ -84,6 +85,19 @@ export async function isUserDismissed(username: string): Promise<boolean> {
       }
     }
     return isDismissed;
+  } catch {
+    return false;
+  }
+}
+
+export async function markUserActioned(username: string): Promise<void> {
+  await redis.set(ACTIONED_KEY(username), '1');
+  await removeUserScore(username);
+}
+
+export async function isUserActioned(username: string): Promise<boolean> {
+  try {
+    return !!(await redis.get(ACTIONED_KEY(username)));
   } catch {
     return false;
   }

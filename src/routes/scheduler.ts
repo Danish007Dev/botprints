@@ -22,6 +22,7 @@ import {
   getCommunityBaseline,
   saveCommunityBaseline,
   isUserDismissed,
+  isUserActioned,
   getClearedUsernames,
   getAllPendingAppeals,
   getAutoActionSettings,
@@ -131,6 +132,11 @@ export async function runDailyAnalysis(): Promise<void> {
     try {
       if (await isUserDismissed(username)) {
         console.log(`BotPrints: Skipped u/${username} - User was previously dismissed.`);
+        continue;
+      }
+
+      if (await isUserActioned(username)) {
+        console.log(`BotPrints: Skipped u/${username} - User was previously actioned (banned/removed).`);
         continue;
       }
 

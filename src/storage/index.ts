@@ -26,6 +26,8 @@ export {
   isUserWatched,
   undismissUser,
   getClearedUsernames,
+  markUserActioned,
+  isUserActioned,
   // 3-Tier Enforcement
   addToFilterList,
   removeFromFilterList,
