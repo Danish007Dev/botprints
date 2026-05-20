@@ -95,6 +95,7 @@
     <nav class="nav-tabs" id="nav-tabs">
       <button class="nav-tab active" data-view="dashboard">📊 Dashboard</button>
       <button class="nav-tab" data-view="appeals">⚖️ Appeals <span class="nav-badge" id="appeals-badge" style="display:none">0</span></button>
+      <button class="nav-tab" data-view="actioned">🚫 Banned</button>
       <button class="nav-tab" data-view="audit">📋 Audit Log</button>
       <button class="nav-tab" data-view="intel">🌐 Shared Intel</button>
       <button class="nav-tab" data-view="settings">⚙️ Settings</button>
@@ -299,6 +300,19 @@
         </div>
         <div class="audit-entries" id="intel-entries">
           <div class="audit-empty" id="intel-empty">Shared Threat Layer is currently disabled. Enable it in Settings → Scheduling & Integrations to participate in the network.</div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Actioned Users View -->
+    <div id="view-actioned" style="display:none">
+      <div class="audit-panel">
+        <div class="audit-header">
+          <h2>🚫 Banned / Removed Users</h2>
+          <p class="audit-desc">Users who were permanently actioned. Click "Clear" to un-hide them and resume behavioral tracking (useful for testing).</p>
+        </div>
+        <div class="audit-entries" id="actioned-entries">
+          <div class="audit-empty">Loading banned users...</div>
         </div>
       </div>
     </div>

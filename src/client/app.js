@@ -1139,7 +1139,7 @@ import { SIGNALS } from '../shared/signals.js';
   // ─── View Switching ────────────────────────────────────────────────────────
   function switchView(view) {
     currentView = view;
-    var views = ['dashboard', 'settings', 'audit', 'appeals', 'intel'];
+    var views = ['dashboard', 'settings', 'audit', 'appeals', 'intel', 'actioned'];
     for (var i = 0; i < views.length; i++) {
       var el = getEl('view-' + views[i]);
       if (el) el.style.display = views[i] === view ? '' : 'none';
@@ -1154,6 +1154,7 @@ import { SIGNALS } from '../shared/signals.js';
     if (view === 'audit') loadAuditLog();
     if (view === 'appeals') loadAppeals();
     if (view === 'intel') loadSharedIntel();
+    if (view === 'actioned') loadActionedUsers();
   }
 
   // ─── Settings Panel ────────────────────────────────────────────────────────
@@ -1369,6 +1370,57 @@ import { SIGNALS } from '../shared/signals.js';
     }
     container.innerHTML = html;
   }
+
+  // ─── Actioned Users Tab ────────────────────────────────────────────────────
+
+  function loadActionedUsers() {
+    var container = getEl('actioned-entries');
+    if (!container) return;
+    container.innerHTML = '<div class="audit-empty">Loading banned users...</div>';
+
+    fetch('/api/actioned')
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        var users = (data && data.users) || [];
+        if (users.length === 0) {
+          container.innerHTML = '<div class="audit-empty">No users have been banned or removed yet.</div>';
+          return;
+        }
+        var html = '';
+        for (var i = 0; i < users.length; i++) {
+          var u = users[i];
+          var username = u.username || 'unknown';
+          var score = u.score || 0;
+          html += '<div class="appeal-item">' +
+            '<div class="appeal-info">' +
+              '<div class="appeal-user">u/' + escapeHTML(username) + '</div>' +
+              '<div class="appeal-timer" style="color:var(--text-secondary)">Risk Score when banned: ' + score + '/100</div>' +
+            '</div>' +
+            '<div class="appeal-actions">' +
+              '<button class="btn action-safe" onclick="unactionUser(\'' + encodeURIComponent(username) + '\')">Restore Tracking</button>' +
+            '</div>' +
+          '</div>';
+        }
+        container.innerHTML = html;
+      })
+      .catch(function() {
+        container.innerHTML = '<div class="audit-empty">Failed to load actioned users.</div>';
+      });
+  }
+
+  window.unactionUser = function(username) {
+    if (!window.confirm('Are you sure you want to restore tracking for u/' + decodeURIComponent(username) + '? They will reappear on the dashboard if they are still suspicious.')) {
+      return;
+    }
+    fetch('/api/unaction/' + encodeURIComponent(username), { method: 'POST' })
+      .then(function() {
+        showToast('Tracking restored for u/' + decodeURIComponent(username), 'success');
+        loadActionedUsers();
+      })
+      .catch(function(err) {
+        showToast('Failed to restore user', 'error');
+      });
+  };
 
   // ─── Audit Log Tab ─────────────────────────────────────────────────────────
 

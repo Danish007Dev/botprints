@@ -25,7 +25,9 @@ import {
   getAppealStatus,
   appendAuditEntry,
   markUserActioned,
+  unmarkUserActioned,
   isUserActioned,
+  getActionedUsernames,
   // Raid Detection
   getRaidState,
   clearRaidState,
@@ -1104,5 +1106,48 @@ api.get('/audit-log', async (c) => {
     return c.json({ status: 'ok', entries });
   } catch (err) {
     return c.json({ status: 'error', entries: [] });
+  }
+});
+
+// ─── Actioned Users ─────────────────────────────────────────────────────────
+api.get('/actioned', async (c) => {
+  try {
+    const actionedUsernames = await getActionedUsernames();
+    const actionedUsers: any[] = [];
+    for (const username of actionedUsernames) {
+      try {
+        const profile = await getUserProfile(username);
+        const history = await getScoreHistory(username);
+        const shift = detectBehavioralShift(history);
+        actionedUsers.push({
+          username,
+          profile,
+          shift,
+          score: history[history.length - 1] || 0
+        });
+      } catch { /* skip */ }
+    }
+    return c.json({ users: actionedUsers });
+  } catch (err) {
+    return c.json({ error: 'failed' }, 500);
+  }
+});
+
+api.post('/unaction/:username', async (c) => {
+  const username = c.req.param('username');
+  console.log(`BotPrints API: /unaction/${username} called`);
+  try {
+    const currentUser = await reddit.getCurrentUser();
+    await unmarkUserActioned(username);
+    await appendAuditEntry({
+      timestamp: Date.now(),
+      action: 'unaction',
+      username,
+      performedBy: currentUser?.username || 'mod',
+      details: `User removed from Actioned/Banned list for testing.`,
+    });
+    return c.json({ status: 'ok' });
+  } catch (err) {
+    return c.json({ error: 'failed' }, 500);
   }
 });

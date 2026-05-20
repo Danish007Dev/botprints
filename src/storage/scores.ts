@@ -8,7 +8,7 @@ const RANKED_KEY = 'bp:scores:ranked';
 const DISMISSED_KEY = (u: string): string => `bp:dismissed:${u}`;
 const WATCHLIST_KEY = 'bp:scores:watchlist';
 const CLEARED_KEY = 'bp:scores:cleared';
-const ACTIONED_KEY = (u: string): string => `bp:actioned:${u}`;
+const ACTIONED_KEY = 'bp:scores:actioned';
 
 export async function updateUserScore(
   username: string,
@@ -91,15 +91,29 @@ export async function isUserDismissed(username: string): Promise<boolean> {
 }
 
 export async function markUserActioned(username: string): Promise<void> {
-  await redis.set(ACTIONED_KEY(username), '1');
+  await redis.zAdd(ACTIONED_KEY, { member: username, score: Date.now() });
   await removeUserScore(username);
+}
+
+export async function unmarkUserActioned(username: string): Promise<void> {
+  await redis.zRem(ACTIONED_KEY, [username]);
 }
 
 export async function isUserActioned(username: string): Promise<boolean> {
   try {
-    return !!(await redis.get(ACTIONED_KEY(username)));
+    const score = await redis.zScore(ACTIONED_KEY, username);
+    return score !== undefined;
   } catch {
     return false;
+  }
+}
+
+export async function getActionedUsernames(): Promise<string[]> {
+  try {
+    const results = await redis.zRange(ACTIONED_KEY, 0, -1);
+    return results.map((r) => r.member);
+  } catch {
+    return [];
   }
 }
 
