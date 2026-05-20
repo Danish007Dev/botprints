@@ -12,6 +12,7 @@ import {
   registerUser,
   appendScoreHistory,
   updateUserScore,
+  removeUserScore,
   dismissUser,
   undismissUser,
   getClearedUsernames,
@@ -688,6 +689,9 @@ api.post('/appeals/:username/approve', async (c) => {
       createdAt: Date.now(),
     });
     
+    // Dismiss the user so they move to the Safe tab and stop triggering alerts
+    await dismissUser(username);
+    
     await appendAuditEntry({
       timestamp: Date.now(),
       action: 'dismiss',
@@ -783,6 +787,9 @@ api.post('/appeals/:username/escalate', async (c) => {
       console.warn(`BotPrints: Could not store ban fingerprint for u/${username}:`, fpErr);
     }
 
+    // Remove them from the active dashboard
+    await removeUserScore(username);
+
     return c.json({ status: 'ok' });
   } catch (err) {
     return c.json({ status: 'error', message: String(err) });
@@ -816,7 +823,7 @@ api.post('/ban-report/:username', async (c) => {
       if (errStr.includes('CANT_RESTRICT_MODERATOR') || errStr.includes('MODERATOR')) {
         return c.json({ status: 'error', message: 'Cannot ban a subreddit moderator.' });
       }
-      throw banErr;
+      console.warn(`BotPrints API: Failed to ban u/${username}:`, banErr);
     }
 
     // Report recent content as spam to Reddit admins
@@ -862,6 +869,9 @@ api.post('/ban-report/:username', async (c) => {
     } catch (fpErr) {
       console.warn(`BotPrints: Could not store ban fingerprint for u/${username}:`, fpErr);
     }
+
+    // Remove them from the active dashboard
+    await removeUserScore(username);
 
     // Notify mod team via modmail
     try {

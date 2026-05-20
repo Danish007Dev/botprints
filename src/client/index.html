@@ -381,6 +381,21 @@
         </div>
       </div>
     </div>
+    <!-- Confirm Modal -->
+    <div class="help-modal" id="confirm-modal" style="display:none; z-index: 10000;">
+      <div class="help-content" style="max-width: 400px; text-align: center;">
+        <div class="help-header" style="justify-content: center; border-bottom: none; padding-bottom: 0;">
+          <h2 id="confirm-title">⚠️ Confirm Action</h2>
+        </div>
+        <div class="help-body">
+          <p id="confirm-message" style="font-size: 14px; margin-bottom: 20px; white-space: pre-wrap;"></p>
+          <div style="display: flex; gap: 10px;">
+            <button class="btn" id="btn-confirm-cancel" style="flex: 1;">Cancel</button>
+            <button class="btn action-remove" id="btn-confirm-ok" style="flex: 1;">Continue</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
   <script type="module" src="./app.js"></script>
 </body>

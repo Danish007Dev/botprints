@@ -55,6 +55,46 @@ import { SIGNALS } from '../shared/signals.js';
     setTimeout(function() { document.body.removeChild(t); }, 4000);
   }
 
+  // Custom Confirm UI
+  function showConfirm(msg, onConfirm) {
+    var modal = getEl('confirm-modal');
+    var msgEl = getEl('confirm-message');
+    var btnOk = getEl('btn-confirm-ok');
+    var btnCancel = getEl('btn-confirm-cancel');
+    if (!modal || !msgEl || !btnOk || !btnCancel) {
+      if (window.confirm && window.confirm(msg)) onConfirm();
+      return;
+    }
+
+    var newBtnOk = btnOk.cloneNode(true);
+    var newBtnCancel = btnCancel.cloneNode(true);
+    btnOk.parentNode.replaceChild(newBtnOk, btnOk);
+    btnCancel.parentNode.replaceChild(newBtnCancel, btnCancel);
+
+    msgEl.textContent = msg;
+    showEl('confirm-modal');
+
+    newBtnOk.addEventListener('click', function() {
+      hideEl('confirm-modal');
+      onConfirm();
+    });
+
+    newBtnCancel.addEventListener('click', function() {
+      hideEl('confirm-modal');
+    });
+  }
+
+  // Basic HTML Escaper
+  function escapeHTML(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   // ─── API ────────────────────────────────────────────────────────────────────
   function fetchDashboard() {
     return fetch('/api/dashboard')
@@ -384,24 +424,25 @@ import { SIGNALS } from '../shared/signals.js';
   }
 
   function onFilterAllRaid(btn) {
-    if (!confirm('This will filter ALL future content from every participant in this raid to modqueue. Continue?')) return;
-    btn.textContent = 'Filtering...';
-    btn.disabled = true;
-    fetch('/api/raid-filter-all', { method: 'POST' })
-      .then(function(res) { return res.json(); })
-      .then(function(data) {
-        if (data.status === 'ok') {
-          btn.textContent = '✓ All Filtered';
-          showToast('Filtered ' + (data.filteredCount || 0) + ' raid participant(s). Their future content will go to modqueue.', 'success');
-        } else {
+    showConfirm('This will filter ALL future content from every participant in this raid to modqueue. Continue?', function() {
+      btn.textContent = 'Filtering...';
+      btn.disabled = true;
+      fetch('/api/raid-filter-all', { method: 'POST' })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (data.status === 'ok') {
+            btn.textContent = '✓ All Filtered';
+            showToast('Filtered ' + (data.filteredCount || 0) + ' raid participant(s). Their future content will go to modqueue.', 'success');
+          } else {
+            btn.textContent = 'Error'; btn.disabled = false;
+            showToast('Failed: ' + data.message, 'error');
+          }
+        })
+        .catch(function() {
           btn.textContent = 'Error'; btn.disabled = false;
-          showToast('Failed: ' + data.message, 'error');
-        }
-      })
-      .catch(function() {
-        btn.textContent = 'Error'; btn.disabled = false;
-        showToast('Failed to filter raid participants (Network error)', 'error');
-      });
+          showToast('Failed to filter raid participants (Network error)', 'error');
+        });
+    });
   }
 
   function onDismissRaid() {
@@ -497,11 +538,12 @@ import { SIGNALS } from '../shared/signals.js';
 
     var btnEscalate = card.querySelector('.btn-escalate');
     if (btnEscalate) btnEscalate.addEventListener('click', function() {
-      if (!confirm('This will permanently ban u/' + appeal.username + '. Continue?')) return;
-      btnEscalate.disabled = true;
-      fetch('/api/appeals/' + encodeURIComponent(appeal.username) + '/escalate', { method: 'POST' })
-        .then(function() { showToast('Escalated to ban.', 'success'); refreshDashboard(); })
-        .catch(function() { showToast('Error escalating.', 'error'); btnEscalate.disabled = false; });
+      showConfirm('This will permanently ban u/' + appeal.username + '. Continue?', function() {
+        btnEscalate.disabled = true;
+        fetch('/api/appeals/' + encodeURIComponent(appeal.username) + '/escalate', { method: 'POST' })
+          .then(function() { showToast('Escalated to ban.', 'success'); refreshDashboard(); })
+          .catch(function() { showToast('Error escalating.', 'error'); btnEscalate.disabled = false; });
+      });
     });
 
     var btnExtend = card.querySelector('.btn-extend');
@@ -797,47 +839,49 @@ import { SIGNALS } from '../shared/signals.js';
 
     // ─── Tier 2: Remove + Appeal ────────────────────────────────────────
     function onRemoveAppeal(u, btn) {
-      if (!confirm('TIER 2: This will remove all recent content from u/' + u + ' and send appeal instructions. Continue?')) return;
-      btn.textContent = 'Removing...';
-      btn.disabled = true;
-      fetch('/api/remove-appeal/' + encodeURIComponent(u), { method: 'POST' })
-        .then(function(res) { return res.json(); })
-        .then(function(data) {
-          if (data.status === 'ok') {
-            btn.textContent = '⚠ Removed';
-            showToast('Removed ' + (data.removedCount || 0) + ' item(s) from u/' + u + '. Appeal instructions sent via modmail.', 'success');
-          } else {
-            btn.textContent = 'Error'; btn.disabled = false;
-            showToast('Failed: ' + data.message, 'error');
-          }
-        })
-        .catch(function() {
-          btn.textContent = 'Error'; btn.disabled = false;
-          showToast('Failed to remove content for u/' + u + ' (Network error)', 'error');
-        });
+      showConfirm('TIER 2: This will remove all recent content from u/' + u + ' and send appeal instructions. Continue?', function() {
+        btn.textContent = 'Removing...';
+        btn.disabled = true;
+        fetch('/api/remove-appeal/' + encodeURIComponent(u), { method: 'POST' })
+          .then(function(res) { return res.json(); })
+          .then(function(data) {
+            if (data.status === 'ok') {
+              btn.textContent = '⚠ Removed';
+              showToast('Removed ' + (data.removedCount || 0) + ' item(s) from u/' + u + '. Appeal instructions sent via modmail.', 'success');
+            } else {
+              btn.textContent = 'Error'; btn.disabled = false;
+              showToast('Failed: ' + data.message, 'error');
+            }
+          })
+          .catch(function() {
+            btn.textContent = 'Processing...'; btn.disabled = true;
+            showToast('Action is taking a while to process. Please refresh the dashboard in a few seconds.', 'info');
+          });
+      });
     }
 
     // ─── Tier 3: Ban + Report ───────────────────────────────────────────
     function onBanReport(u, btn) {
-      if (!confirm('⚠ TIER 3 — PERMANENT ACTION ⚠\n\nThis will:\n• Permanently ban u/' + u + '\n• Report all their content as spam\n• Remove all their content\n\nThis cannot be undone from the dashboard.\nContinue?')) return;
-      btn.textContent = 'Banning...';
-      btn.disabled = true;
-      fetch('/api/ban-report/' + encodeURIComponent(u), { method: 'POST' })
-        .then(function(res) { return res.json(); })
-        .then(function(data) {
-          if (data.status === 'ok') {
-            btn.textContent = '🚫 Banned';
-            showToast('u/' + u + ' permanently banned. ' + (data.reportedCount || 0) + ' item(s) reported as spam.', 'success');
-            setTimeout(refreshDashboard, 1000);
-          } else {
-            btn.textContent = 'Error'; btn.disabled = false;
-            showToast('Failed: ' + data.message, 'error');
-          }
-        })
-        .catch(function() {
-          btn.textContent = 'Error'; btn.disabled = false;
-          showToast('Failed to ban u/' + u + ' (Network error)', 'error');
-        });
+      showConfirm('⚠ TIER 3 — PERMANENT ACTION ⚠\n\nThis will:\n• Permanently ban u/' + u + '\n• Report all their content as spam\n• Remove all their content\n\nThis cannot be undone from the dashboard.\nContinue?', function() {
+        btn.textContent = 'Banning...';
+        btn.disabled = true;
+        fetch('/api/ban-report/' + encodeURIComponent(u), { method: 'POST' })
+          .then(function(res) { return res.json(); })
+          .then(function(data) {
+            if (data.status === 'ok') {
+              btn.textContent = '🚫 Banned';
+              showToast('u/' + u + ' permanently banned. ' + (data.reportedCount || 0) + ' item(s) reported as spam.', 'success');
+              setTimeout(refreshDashboard, 1000);
+            } else {
+              btn.textContent = 'Error'; btn.disabled = false;
+              showToast('Failed: ' + data.message, 'error');
+            }
+          })
+          .catch(function() {
+            btn.textContent = 'Processing...'; btn.disabled = true;
+            showToast('Action is taking a while to process. Please refresh the dashboard in a few seconds.', 'info');
+          });
+      });
     }
 
     function onMarkSafeUser(u) {
@@ -1524,12 +1568,17 @@ import { SIGNALS } from '../shared/signals.js';
     }
     for (var l = 0; l < escalateBtns.length; l++) {
       escalateBtns[l].addEventListener('click', function(e) {
-        if (!confirm('Escalate appeal for u/' + e.target.getAttribute('data-user') + '? This will ban the user.')) return;
         var user = e.target.getAttribute('data-user');
-        e.target.disabled = true;
-        e.target.textContent = 'Escalating...';
-        fetch('/api/appeals/' + user + '/escalate', { method: 'POST' })
-          .then(function() { loadAppeals(); fetchDashboard(); });
+        showConfirm('Escalate appeal for u/' + user + '? This will ban the user.', function() {
+          e.target.disabled = true;
+          e.target.textContent = 'Escalating...';
+          fetch('/api/appeals/' + user + '/escalate', { method: 'POST' })
+            .then(function() { loadAppeals(); fetchDashboard(); })
+            .catch(function() { 
+              e.target.textContent = 'Processing...'; e.target.disabled = true;
+              showToast('Escalation is processing. Please refresh the dashboard in a few seconds.', 'info');
+            });
+        });
       });
     }
   }
