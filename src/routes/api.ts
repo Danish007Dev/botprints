@@ -1133,6 +1133,17 @@ api.put('/settings', async (c) => {
   }
 });
 
+api.post('/settings/reset', async (c) => {
+  try {
+    await redis.del('bp:settings:autoaction');
+    const defaults = await getAutoActionSettings();
+    console.log('BotPrints API: Settings reset to defaults');
+    return c.json({ status: 'ok', settings: defaults });
+  } catch (err) {
+    return c.json({ status: 'error', message: String(err) });
+  }
+});
+
 // ═══════════════════════════════════════════════════════════════════════════
 // AUDIT LOG API
 // ═══════════════════════════════════════════════════════════════════════════

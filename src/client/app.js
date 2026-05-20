@@ -1397,30 +1397,49 @@ import { SIGNALS } from '../shared/signals.js';
               '<div class="appeal-timer" style="color:var(--text-secondary)">Risk Score when banned: ' + score + '/100</div>' +
             '</div>' +
             '<div class="appeal-actions">' +
-              '<button class="btn action-safe" onclick="unactionUser(\'' + encodeURIComponent(username) + '\')">Restore Tracking</button>' +
+              '<button class="btn action-safe btn-restore-tracking" data-username="' + escapeHTML(username) + '">Restore Tracking</button>' +
             '</div>' +
           '</div>';
         }
         container.innerHTML = html;
+
+        // Bind restore buttons via event delegation
+        var restoreBtns = container.querySelectorAll('.btn-restore-tracking');
+        for (var j = 0; j < restoreBtns.length; j++) {
+          (function(btn) {
+            btn.addEventListener('click', function(ev) {
+              ev.stopPropagation();
+              var user = btn.getAttribute('data-username');
+              if (!user) return;
+              showConfirm('Restore tracking for u/' + user + '?\n\nThey will reappear on the dashboard if still suspicious.', function() {
+                btn.textContent = 'Restoring...';
+                btn.disabled = true;
+                fetch('/api/unaction/' + encodeURIComponent(user), { method: 'POST' })
+                  .then(function(res) { return res.json(); })
+                  .then(function(data) {
+                    if (data.status === 'ok') {
+                      showToast('Tracking restored for u/' + user, 'success');
+                      loadActionedUsers();
+                    } else {
+                      showToast('Failed: ' + (data.error || 'Unknown error'), 'error');
+                      btn.textContent = 'Restore Tracking';
+                      btn.disabled = false;
+                    }
+                  })
+                  .catch(function() {
+                    showToast('Failed to restore user', 'error');
+                    btn.textContent = 'Restore Tracking';
+                    btn.disabled = false;
+                  });
+              });
+            });
+          })(restoreBtns[j]);
+        }
       })
       .catch(function() {
         container.innerHTML = '<div class="audit-empty">Failed to load actioned users.</div>';
       });
   }
-
-  window.unactionUser = function(username) {
-    if (!window.confirm('Are you sure you want to restore tracking for u/' + decodeURIComponent(username) + '? They will reappear on the dashboard if they are still suspicious.')) {
-      return;
-    }
-    fetch('/api/unaction/' + encodeURIComponent(username), { method: 'POST' })
-      .then(function() {
-        showToast('Tracking restored for u/' + decodeURIComponent(username), 'success');
-        loadActionedUsers();
-      })
-      .catch(function(err) {
-        showToast('Failed to restore user', 'error');
-      });
-  };
 
   // ─── Audit Log Tab ─────────────────────────────────────────────────────────
 
@@ -1535,6 +1554,32 @@ import { SIGNALS } from '../shared/signals.js';
       // Settings: save button
       var saveBtn = getEl('btn-save-settings');
       if (saveBtn) saveBtn.addEventListener('click', function() { saveSettings(); });
+
+      // Settings: reset to defaults button
+      var resetBtn = getEl('btn-reset-settings');
+      if (resetBtn) resetBtn.addEventListener('click', function() {
+        showConfirm('Reset ALL settings to BotPrints defaults?\n\nThis will restore:\n• Score thresholds (60/80/90)\n• All actions to "Do Nothing"\n• Default appeal message\n• All toggles to default state\n\nThis cannot be undone.', function() {
+          resetBtn.textContent = 'Resetting...';
+          resetBtn.disabled = true;
+          fetch('/api/settings/reset', { method: 'POST' })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+              if (data.status === 'ok') {
+                showToast('Settings reset to defaults.', 'success');
+                loadSettings();
+              } else {
+                showToast('Failed to reset settings.', 'error');
+              }
+              resetBtn.textContent = '🔄 Reset to Defaults';
+              resetBtn.disabled = false;
+            })
+            .catch(function() {
+              showToast('Network error resetting settings.', 'error');
+              resetBtn.textContent = '🔄 Reset to Defaults';
+              resetBtn.disabled = false;
+            });
+        });
+      });
 
     } catch (e) {
       console.error('BotPrints init error:', e);
