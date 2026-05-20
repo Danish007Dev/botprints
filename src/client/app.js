@@ -605,20 +605,20 @@ import { SIGNALS } from '../shared/signals.js';
     var angles = [];
     for (var i = 0; i < n; i++) angles.push((Math.PI * 2 * i) / n - Math.PI / 2);
 
-    var svg = '<svg viewBox="0 0 130 130" width="100%" height="100%" style="max-width: 110px;">';
+    var svg = '<svg viewBox="0 0 130 130" width="100%" height="100%" style="max-width: 150px;">';
 
     // Grid circles
     var gridLevels = [0.25, 0.5, 0.75, 1];
     for (var g = 0; g < gridLevels.length; g++) {
       svg += '<circle cx="' + cx + '" cy="' + cy + '" r="' + (radius * gridLevels[g]) +
-        '" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="0.5"/>';
+        '" fill="none" stroke="var(--radar-grid)" stroke-width="0.8"/>';
     }
     // Axes
     for (var a = 0; a < angles.length; a++) {
       svg += '<line x1="' + cx + '" y1="' + cy +
         '" x2="' + (cx + radius * Math.cos(angles[a])) +
         '" y2="' + (cy + radius * Math.sin(angles[a])) +
-        '" stroke="rgba(255,255,255,0.06)" stroke-width="0.5"/>';
+        '" stroke="var(--radar-grid)" stroke-width="0.8"/>';
     }
     // Data polygon
     var pts = [];
@@ -638,7 +638,7 @@ import { SIGNALS } from '../shared/signals.js';
       var lx = cx + (radius + 13) * Math.cos(angles[l]);
       var ly = cy + (radius + 13) * Math.sin(angles[l]);
       svg += '<text x="' + lx + '" y="' + ly +
-        '" text-anchor="middle" dominant-baseline="central" fill="#8b929a" font-size="6.5">' +
+        '" text-anchor="middle" dominant-baseline="central" fill="var(--radar-text)" font-size="8" font-weight="600">' +
         labels[l] + '</text>';
     }
     svg += '</svg>';
@@ -653,20 +653,20 @@ import { SIGNALS } from '../shared/signals.js';
     var angles = [];
     for (var i = 0; i < n; i++) angles.push((Math.PI * 2 * i) / n - Math.PI / 2);
 
-    var svg = '<svg viewBox="0 0 140 140" width="100%" height="100%" style="max-width: 120px;">';
+    var svg = '<svg viewBox="0 0 140 140" width="100%" height="100%" style="max-width: 150px;">';
 
     // Grid circles
     var gridLevels = [0.25, 0.5, 0.75, 1];
     for (var g = 0; g < gridLevels.length; g++) {
       svg += '<circle cx="' + cx + '" cy="' + cy + '" r="' + (radius * gridLevels[g]) +
-        '" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="0.6"/>';
+        '" fill="none" stroke="var(--radar-grid)" stroke-width="0.8"/>';
     }
     // Axes
     for (var a = 0; a < angles.length; a++) {
       svg += '<line x1="' + cx + '" y1="' + cy +
         '" x2="' + (cx + radius * Math.cos(angles[a])) +
         '" y2="' + (cy + radius * Math.sin(angles[a])) +
-        '" stroke="rgba(255,255,255,0.06)" stroke-width="0.6"/>';
+        '" stroke="var(--radar-grid)" stroke-width="0.8"/>';
     }
 
     function points(vals) {
@@ -692,7 +692,7 @@ import { SIGNALS } from '../shared/signals.js';
       var lx = cx + (radius + 14) * Math.cos(angles[l]);
       var ly = cy + (radius + 14) * Math.sin(angles[l]);
       svg += '<text x="' + lx + '" y="' + ly +
-        '" text-anchor="middle" dominant-baseline="central" fill="#8b929a" font-size="7">' +
+        '" text-anchor="middle" dominant-baseline="central" fill="var(--radar-text)" font-size="8" font-weight="600">' +
         labels[l] + '</text>';
     }
 
