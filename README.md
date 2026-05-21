@@ -438,8 +438,7 @@ The **🚫 Banned** tab shows all permanently actioned users. The "Restore Track
 
 ---
 
-<details>
-<summary><strong>📚 Academic References</strong></summary>
+## 📚 Academic References
 
 1. **Varol et al.**, "Online Human-Bot Interactions: Detection, Estimation, and Characterization" — *ICWSM 2017* — Botometer temporal behavioral signals
 2. **Pozzana & Ferrara**, "Measuring Bot and Human Behavioral Dynamics" — *Frontiers in Physics 2020* — Inter-arrival time burstiness analysis
@@ -447,7 +446,6 @@ The **🚫 Banned** tab shows all permanently actioned users. The "Restore Track
 4. **"Behavior Change as a Signal for Identifying Social Media Manipulation"** — *arXiv 2025* — Behavioral shift detection in warmed-up accounts
 5. **MIT CIB Research** — *2024* — Coordinated inauthentic behavior detection via temporal correlation
 
-</details>
 
 ---
 

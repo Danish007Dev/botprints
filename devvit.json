@@ -37,7 +37,7 @@
     "items": [
       {
         "label": "📊 Open BotPrints Dashboard",
-        "description": "Create a BotPrints dashboard post to analyze user behavior",
+        "description": "Open the BotPrints behavioral forensics dashboard",
         "forUserType": "moderator",
         "location": "subreddit",
         "endpoint": "/internal/menu/open-dashboard"

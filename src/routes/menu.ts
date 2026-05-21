@@ -2,17 +2,48 @@
 import { Hono } from 'hono';
 import type { MenuItemRequest } from '@devvit/web/shared';
 import { reddit } from '@devvit/web/server';
+import { redis } from '@devvit/redis';
 import { runDailyAnalysis } from './scheduler.js';
 
 export const menu = new Hono();
 
+const DASHBOARD_POST_KEY = 'bp:dashboard:postId';
+
 // ─── Open Dashboard ─────────────────────────────────────────────────────────
-// src/routes/menu.ts
+// Reuses an existing dashboard post if one has already been created.
+// Only creates a new post when no valid stored post can be found.
 
 menu.post('/open-dashboard', async (c) => {
   await c.req.json<MenuItemRequest>();
 
   try {
+    // ─── Try to reuse the existing dashboard post ───────────────────────
+    const storedPostId = await redis.get(DASHBOARD_POST_KEY);
+
+    if (storedPostId) {
+      try {
+        const existing = await reddit.getPostById(storedPostId as `t3_${string}`);
+        const postUrl = existing.url.startsWith('http')
+          ? existing.url
+          : `https://www.reddit.com${existing.permalink}`;
+
+        return c.json(
+          {
+            showToast: {
+              text: '📊 Opening existing dashboard...',
+              appearance: 'success',
+            },
+            navigateTo: postUrl,
+          },
+          200
+        );
+      } catch {
+        // Stored post no longer exists (deleted, etc.) — fall through to create a new one
+        console.warn('BotPrints: Stored dashboard post not found, creating a new one.');
+      }
+    }
+
+    // ─── Create a new dashboard post ────────────────────────────────────
     const post = await reddit.submitCustomPost({
       title: '🔬 BotPrints — Behavioral Forensics Dashboard',
       entry: 'default',
@@ -29,6 +60,9 @@ menu.post('/open-dashboard', async (c) => {
       console.warn('BotPrints: Could not remove/distinguish dashboard post:', modErr);
       // Continue anyway — the menu action is already mod-gated
     }
+
+    // ─── Persist the post ID for future reuse ─────────────────────────────
+    await redis.set(DASHBOARD_POST_KEY, post.id);
 
     const postUrl = post.url.startsWith('http')
       ? post.url
