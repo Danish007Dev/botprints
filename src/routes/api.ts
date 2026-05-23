@@ -67,6 +67,38 @@ import type {
 
 export const api = new Hono();
 
+// ─── SECURITY: Global API Moderator Check ───────────────────────────────────
+api.use('*', async (c, next) => {
+  // Allow health check to pass without auth
+  if (c.req.path.endsWith('/health')) {
+    return await next();
+  }
+
+  try {
+    const currentUser = await reddit.getCurrentUser();
+    const subreddit = await reddit.getCurrentSubreddit();
+
+    if (!currentUser) {
+      return c.json({ error: 'unauthorized', message: 'Not logged in' }, 403);
+    }
+
+    const mods = await reddit.getModerators({
+      subredditName: subreddit.name,
+      username: currentUser.username,
+    }).all();
+
+    if (mods.length === 0) {
+      return c.json({ error: 'forbidden', message: 'Moderator access required' }, 403);
+    }
+  } catch (err) {
+    console.error('BotPrints API: Error verifying moderator status:', err);
+    return c.json({ error: 'server_error', message: 'Failed to verify moderator status' }, 500);
+  }
+
+  return await next();
+});
+
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function getCalibrationStatus(baseline: CommunityBaseline): {
@@ -116,24 +148,7 @@ api.get('/health', (c) => c.json({ status: 'ok', app: 'botprints', version: '0.2
 // ─── Dashboard Data ─────────────────────────────────────────────────────────
 api.get('/dashboard', async (c) => {
   try {
-    // ─── SECURITY: Verify the requesting user is a moderator ──────────
-    const currentUser = await reddit.getCurrentUser();
     const subreddit = await reddit.getCurrentSubreddit();
-
-    if (!currentUser) {
-      return c.json({ error: 'unauthorized', message: 'Not logged in' }, 403);
-    }
-
-    const mods = await reddit.getModerators({
-      subredditName: subreddit.name,
-      username: currentUser.username,
-    }).all();
-
-    if (mods.length === 0) {
-      return c.json({ error: 'forbidden', message: 'Moderator access required' }, 403);
-    }
-    // ──────────────────────────────────────────────────────────────────────
-
     const topUsers = await getTopRiskyUsers(20);
     const baseline = await getCommunityBaseline(subreddit.id);
     const calibration = getCalibrationStatus(baseline);

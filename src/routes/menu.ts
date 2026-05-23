@@ -7,6 +7,32 @@ import { runDailyAnalysis } from './scheduler.js';
 
 export const menu = new Hono();
 
+// ─── SECURITY: Global Menu Moderator Check ──────────────────────────────────
+menu.use('*', async (c, next) => {
+  try {
+    const currentUser = await reddit.getCurrentUser();
+    const subreddit = await reddit.getCurrentSubreddit();
+
+    if (!currentUser) {
+      return c.json({ showToast: { text: '❌ Unauthorized: Not logged in', appearance: 'neutral' } }, 403);
+    }
+
+    const mods = await reddit.getModerators({
+      subredditName: subreddit.name,
+      username: currentUser.username,
+    }).all();
+
+    if (mods.length === 0) {
+      return c.json({ showToast: { text: '❌ Forbidden: Moderator access required', appearance: 'neutral' } }, 403);
+    }
+  } catch (err) {
+    console.error('BotPrints Menu: Error verifying moderator status:', err);
+    return c.json({ showToast: { text: '❌ Error verifying moderator status', appearance: 'neutral' } }, 500);
+  }
+
+  return await next();
+});
+
 const DASHBOARD_POST_KEY = 'bp:dashboard:postId';
 
 // ─── Open Dashboard ─────────────────────────────────────────────────────────
